@@ -8,13 +8,20 @@
 
 ***This is not even "Alpha": you should only be here if you have been personally requested by me! It's just a placeholder until the final version is ready for release, so please, IGNORE IT!***
 
+Current status: Pretty solid, perhaps a few edge / corner case left, but generally very close to "ready" (it was, after all, the working core of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT))
+
+TODO:
+* Reintegrate with [PangolinMQTT](https://github.com/philbowles/PangolinMQTT). In theory its easy but its actually quite tricky as we have to add back in all the MQTT-specific low-level memory blocking in a way that preserves the now "neutral" protocol-agnostic memory management method.
+* Full systematic re-test of *all* pangolin features especially the large packet stuff. (straightfoward long-winded tedium)
+* wrap / encapsulate into an H4 "Plugin" (see [H4/Plugins](https://github.com/philbowles/h4plugins) ) ready for its next major release (quite tricky)
+  
 # What it will do when it's ready ("real soon now")
 
 AardvarkTCP extends the popular [ESPAsyncTCP](blah) and [AsyncTCP] libraries. It adds *huge** packet fragmentation on transmit (TX), and reassembly of *huge** packets on receive (RX). It also fixes at least two fatal bugs in [ESPAsyncTCP](blah) which cause significant issue when trying to implement robust apps on top of that library. The full [ESPAsyncTCP](blah) API is provided, plus some extremely useful additions.
 
 *By "huge" we mean any packet that is larger than the total LwIP buffers. If you compile with the "Low Memory" option this will be 1072 bytes or 2920 with the "Higher Bandwith" options (as of Apr 2021)
 
-LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the indiviual LwIP buffer size) and 2 (the number of buffers) are implementation independent and *could* change in the future, so "hardcoding any of them into your own app if you needed to do your own fragmentation/reassembly routine would be a **bad idea** as it could cause problmes in the future or prevent you code running on newer / different machines.
+LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation independent and *could* change in the future, so "hardcoding any of them into your own app if you needed to do your own fragmentation/reassembly routine would be a **bad idea** as it could cause problmes in the future or prevent you code running on newer / different machines.
 
 AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, no matter what any of those LwIP "magic numbers" above are. It also provides a very simple interface which seamlessly manages both normal, unencrypted and TLS-encrypted sessions, depending on the URL provided.
 
@@ -22,21 +29,20 @@ AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to b
 
 # The "menagerie"
 
-AardvarkTCP is the core driver of several other firmware packages for simple *robust* and rapid IOT development on ESP8266 / ESP32
+AardvarkTCP is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
 
 ![roadmap](assets/menagerie.jpg)
 
 ## The related libraries
-
 
 || Name | Provides | Notes |
 | :---: | :----------  | :--- | :--- |
 |![roadmap](assets/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers| |
 ||[Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master)|"Glue" to LwIP| Important bugfixes |
 ||[Forked ESPAsyncWebserver](https://github.com/philbowles/ESPAsyncWebServer)| Basis of webUI in H4Plugins| Several major bugfixes |
-|![roadmap](assets/aardvark_icon.jpg)|[AardvarkTCP]()|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
+|![roadmap](assets/aardvark_icon.jpg)|[AardvarkTCP](https://github.com/philbowles/AardvarkTCP)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
 |![roadmap](assets/pangolin_icon.jpg)|[PangolinMQTT](https://github.com/philbowles/PangolinMQTT)|Async MQTT Client|QoS 0/1/2 Fully 3.1.1 compliant. Large payloads |
-|![roadmap](assets/armadillo_icon.jpg)|[ArmadilloHTTP]()|Async HTTP/S Client| Simple send/callback of large payloads |
+|![roadmap](assets/armadillo_icon.jpg)|[ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)|Async HTTP/S Client| Simple send/callback of large payloads |
 |![roadmap](assets/h4p_icon.jpg)|[H4/Plugins](https://github.com/philbowles/h4plugins)|Full Async IOT Firmware| Webserver, MQTT, OTA, NTP, HTTP etc etc |
 
 ---
