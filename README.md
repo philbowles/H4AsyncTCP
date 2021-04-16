@@ -17,6 +17,14 @@ TODO:
   
 # What it will do when it's ready ("real soon now")
 
+On its own, not a lot. It i designed tobe "inherited from" and both [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) and [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) use it as their core Async TCP driver. So if you want to use either of those, or [H4/Plugins](https://github.com/philbowles/h4plugins) which sist on top of them both, you will need it no matter what.
+
+It's also useful if you want to write your own Async protocol handler, as 90% of the hard bits have already been done for you. The whole process is reduced to:
+
+* set up server URL
+* set up RX function to receive data
+* send some data
+
 AardvarkTCP extends the popular [ESPAsyncTCP](blah) and [AsyncTCP] libraries. It adds *huge** packet fragmentation on transmit (TX), and reassembly of *huge** packets on receive (RX). It also fixes at least two fatal bugs in [ESPAsyncTCP](blah) which cause significant issue when trying to implement robust apps on top of that library. The full [ESPAsyncTCP](blah) API is provided, plus some extremely useful additions.
 
 *By "huge" we mean any packet that is larger than the total LwIP buffers. If you compile with the "Low Memory" option this will be 1072 bytes or 2920 with the "Higher Bandwith" options (as of Apr 2021)
@@ -24,6 +32,27 @@ AardvarkTCP extends the popular [ESPAsyncTCP](blah) and [AsyncTCP] libraries. It
 LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation independent and *could* change in the future, so "hardcoding any of them into your own app if you needed to do your own fragmentation/reassembly routine would be a **bad idea** as it could cause problmes in the future or prevent you code running on newer / different machines.
 
 AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, no matter what any of those LwIP "magic numbers" above are. It also provides a very simple interface which seamlessly manages both normal, unencrypted and TLS-encrypted sessions, depending on the URL provided.
+
+## Worth 1000 words:
+
+Apart from the whole of the ESPAsyncTCP API which is exposed for compatibility should you need it (you won't!), the entire API is:
+
+```cpp
+size_t  getMaxPayloadSize();
+void    onServerConnect(VARK_cbConnect callback);
+void    onServerDisconnect(VARK_cbDisconnect callback);
+void    onServerError(VARK_cbError callback);
+void    rx(VARK_FN_RXDATA f); // name a function taking const uint8_t* d,size_t len that will receieve data (whenever)
+void    serverConnect();
+void    serverDisconnect(bool force = false);
+void    serverURL(const char* url,const uint8_t* fingerprint=nullptr);
+void    tx(const uint8_t* d,size_t len,bool copy=true); // send some data
+
+```
+
+Two questions:
+1) Could it get any simpler?
+2) Why should it ever need to?
 
 ---
 
@@ -54,7 +83,7 @@ In that role it allowed for huge payloads (up to 1/2 the available Free Heap) to
 
 No other library known to the author for ESP8266 / ESP32 can do this for MQTT and it does it seamlessly over TLS for HTTPS or unencrypted HTTP. From the user's point-of-view you just "send a large packet" or "receive a large packet" - *which is the way it should be!*
 
-It is not much of a leap to realise tha the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or SOMEOTHEREXAMPLE, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](). (The diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
+It is not much of a leap to realise tha the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or SOMEOTHEREXAMPLE, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP). (The diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
 
 ![mbm](assets/origin.jpg)
 
