@@ -28,6 +28,17 @@ SOFTWARE.
 */
 #include<AardvarkUtils.h>
 // non-member utils:
+
+#if defined(ARDUINO_ARCH_ESP32)
+void _HAL_feedWatchdog(){}
+uint32_t _HAL_getFreeHeap(){ return ESP.getMaxAllocHeap(); }
+#else
+void _HAL_feedWatchdog(){ ESP.wdtFeed(); }
+uint32_t _HAL_getFreeHeap(){ return ESP.getMaxFreeBlockSize(); }
+#endif
+
+uint32_t _HAL_maxPayloadSize(){ return (_HAL_getFreeHeap() - VARK_HEAP_SAFETY) / 2; }
+
 extern "C" {
     #include "user_interface.h"
 }
@@ -52,7 +63,7 @@ void dumphex(const uint8_t* mem, size_t len) {
             system_soft_wdt_feed();
         }
         Serial.println();
-    } else Serial.printf("ZERO PARAMETER!!! 0x%08x(%d)\n",mem,len);
+    }
 }
 
 string join(const vector<string>& vs,const char* delim) {

@@ -25,17 +25,11 @@ SOFTWARE.
 #pragma once
 #include<AardvarkTCP.h>
 #include<unordered_set>
-//
-//   M   O   V   E         S   E   M   A   N   T   I   C   S   !
-//
+
 using VARK_MEM_POOL         = std::unordered_set<ADFP>;
 
 class mbx {
                 void            _create(ADFP p);
-   //             void            _move(mbx& other);
-   // disable copying
-   //     mbx(const mbx&);
-   //     mbx& operator=(const mbx&);
     public:
         static  VARK_MEM_POOL   pool;
 
@@ -43,32 +37,19 @@ class mbx {
                 size_t          len=0;
                 ADFP            data=nullptr;
                 ADFP            frag=nullptr;
-/*
-        // move constructor C::C(C&& other);
-        mbx(mbx&& other) {
-//            Serial.printf("MBX CTOR MV FROM data=0x%08x len=%d\n",other.data,other.len);
-            _move(other);
-        }
-        // move assignment C& C::operator=(C&& other);
-        mbx& operator=(mbx&& other) {
-//            Serial.printf("MBX ASSIGN FROM data=0x%08x len=%d\n",other.data,other.len);
-            if(this != &other) {
-                if(data) delete data;
-                _move(other);
-            }
-            return *this;
-        }
-*/
         //  "normal" constructors
-        mbx(){ Serial.printf("MBX CTOR DEFAULT=EMPTY\n"); }
+        mbx(){}
         mbx(ADFP p,size_t s,bool copy=true): frag(nullptr),len(s),managed(copy){ _create(p); }
         mbx(ADFP p,ADFP f,size_t s,bool copy=true): frag(f),len(s),managed(copy){ _create(p); }
         // 
-        ~mbx(){} // absolutely do not never nohow free the data pointer here! It must stay alive till it is ACKed
-                void            ack();
+        virtual ~mbx(){} // absolutely do not never nohow free the data pointer here! It must stay alive till it is ACKed
+        virtual void            ack();
                 void            clear();
-        static  void            dump(size_t n=32);
+        static  void            clear(ADFP);
+        static  uint8_t*        getMemory(size_t size);
+#if AARD_DEBUG 
+        static  void            dump(size_t n=64);
 
-                void            _dump(size_t n=32);
-                void            _keep();
+                void            _dump(size_t n=10000);
+#endif
 };

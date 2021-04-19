@@ -27,7 +27,8 @@ SOFTWARE.
 /*
     Debug levels: 
     0 - No debug messages
-    1 - connection / disconnection messages
+    1 - TX / RX messages
+
     4 - everything
 */
 

@@ -39,13 +39,13 @@ Apart from the whole of the ESPAsyncTCP API which is exposed for compatibility s
 
 ```cpp
 size_t  getMaxPayloadSize();
-void    onServerConnect(VARK_cbConnect callback);
-void    onServerDisconnect(VARK_cbDisconnect callback);
-void    onServerError(VARK_cbError callback);
+void    onTCPconnect(VARK_cbConnect callback);
+void    onTCPdisconnect(VARK_cbDisconnect callback);
+void    onTCPerror(VARK_cbError callback);
 void    rx(VARK_FN_RXDATA f); // name a function taking const uint8_t* d,size_t len that will receieve data (whenever)
-void    serverConnect();
-void    serverDisconnect(bool force = false);
-void    serverURL(const char* url,const uint8_t* fingerprint=nullptr);
+void    TCPconnect();
+void    TCPdisconnect(bool force = false);
+void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
 void    tx(const uint8_t* d,size_t len,bool copy=true); // send some data
 
 ```

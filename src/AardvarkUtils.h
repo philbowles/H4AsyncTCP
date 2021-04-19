@@ -32,8 +32,13 @@ SOFTWARE.
 #include<Arduino.h>
 #include<vector>
 #include<string>
+#include"vark_config.h"
 
 using namespace std;
+
+void            _HAL_feedWatchdog();
+uint32_t        _HAL_getFreeHeap();
+size_t          _HAL_maxPayloadSize();
 
 void            dumphex(const uint8_t* mem, size_t len);
 string 		    join(const vector<string>& vs,const char* delim="\n");

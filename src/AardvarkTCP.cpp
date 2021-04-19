@@ -25,20 +25,9 @@ SOFTWARE.
 #include <AardvarkTCP.h>
 #include <AardvarkUtils.h>
 
-#define CSTR(x) x.c_str()
-
-#if defined(ARDUINO_ARCH_ESP32)
-void AardvarkTCP::_HAL_feedWatchdog(){}
-uint32_t AardvarkTCP::_HAL_getFreeHeap(){ return ESP.getMaxAllocHeap(); }
-#else
-void AardvarkTCP::_HAL_feedWatchdog(){ ESP.wdtFeed(); }
-uint32_t AardvarkTCP::_HAL_getFreeHeap(){ return ESP.getMaxFreeBlockSize(); }
-#endif
+size_t          AardvarkTCP::_maxpl;
 
 AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
-//    close(true);
-//    if(_URL) delete _URL;
-
     setNoDelay(true);
     onConnect([this](void* obj, AsyncClient* c) { 
     #if ASYNC_TCP_SSL_ENABLED
@@ -51,41 +40,40 @@ AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
                 }
             }
         #else
-            Serial.printf("WARNING! Fingerprint not checked!\n");
+            VARK_PRINT1("WARNING! Fingerprint not checked!\n");
         #endif
     #endif
         _space=space();
         _maxpl=(_HAL_getFreeHeap() / 2 ) - VARK_HEAP_SAFETY;
-        Serial.printf("Connected space=%u Max packet size %d\n",space(),getMaxPayloadSize());
+        VARK_PRINT1("Connected space=%u Max packet size %d\n",space(),getMaxPayloadSize());
         if( _cbConnect)  _cbConnect();
     });
     onDisconnect([this](void* obj, AsyncClient* c) { VARK_PRINT1("TCP onDisconnect\n"); _onDisconnect(VARK_TCP_DISCONNECTED); });
     onError([=](void* obj, AsyncClient* c,int error) { VARK_PRINT1("TCP onError %d\n",error); _cbError(VARK_TCP_UNHANDLED,error); });
     onAck([=](void* obj, AsyncClient* c,size_t len, uint32_t time){ _ackTCP(len,time); }); 
     onData([=](void* obj, AsyncClient* c, void* data, size_t len) { _onData(static_cast<uint8_t*>(data), len); });
-    //onPoll([=](void* obj, AsyncClient* c) { });
+    onPoll([=](void* obj, AsyncClient* c) { if(_cbPoll) _cbPoll(); });
 } 
 
-void AardvarkTCP::serverURL(const char* url,const uint8_t* fingerprint){
-    _parseURL(url);
-    Serial.printf("secure=%d\n",_URL->secure);
-    if(_URL->secure){
-    #if ASYNC_TCP_SSL_ENABLED
-        if(fingerprint) memcpy(_fingerprint, fingerprint, SHA1_SIZE);
-        else _cbError(VARK_TLS_NO_FINGERPRINT,0);
-    #else
-        _cbError(VARK_TLS_NO_SSL,0);
-    #endif
+void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
+   VARK_PRINT4("ACK! nTXQ=%d ACK LENGTH=%d _secure=%d\n",TXQ.size(),len,_URL->secure);
+    size_t amtToAck=len;
+    while(amtToAck){
+        if(!TXQ.empty()){
+            mbx tmp=std::move(TXQ.front());
+            TXQ.pop();
+            VARK_PRINT4("amt2ack=%d _secure=%d sub=%d leaving %d\n",amtToAck,_URL->secure,_ackSize(tmp.len),amtToAck-_ackSize(tmp.len));
+            amtToAck-=_ackSize(tmp.len);
+            tmp.ack();
+        } else break;
     }
-    else {
-        if(fingerprint) _cbError(VARK_TLS_UNWANTED_FINGERPRINT,0);
-    }
+    _runTXQ();
 }
 
 void AardvarkTCP::_onData(uint8_t* data, size_t len) {
     static uint32_t stored=0;
-    VARK_PRINT4("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,isRecvPush(),stored,_HAL_getFreeHeap());
-    dumphex(data,len);
+    VARK_PRINT1("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,isRecvPush(),stored,_HAL_getFreeHeap());
+//    VARK_DUMP4(data,len);
     if(getMaxPayloadSize() > stored+len){ // = sigma fragmets so far + current fragment 
         if(isRecvPush() || _URL->secure){
             uint8_t* bpp=static_cast<uint8_t*>(malloc(stored+len));
@@ -113,67 +101,33 @@ void AardvarkTCP::_onData(uint8_t* data, size_t len) {
     }
     else {
         VARK_PRINT4("MPL=%d stored+len=%d FH=%u\n",getMaxPayloadSize(),stored+len,_HAL_getFreeHeap());
-        _cbError(VARK_TOO_BIG,stored+len);
-        serverDisconnect(true);
+        _cbError(VARK_INPUT_TOO_BIG,stored+len);
+        TCPdisconnect(true);
     }
 }
 
 void AardvarkTCP::_onDisconnect(int8_t r) {
     VARK_PRINT1("ON DISCONNECT FH=%u r=%d\n",_HAL_getFreeHeap(),r); 
     auto n=TXQ.size();
-    Serial.printf("DELETE ALL %d TXQ MBXs\n",n);
+    VARK_PRINT4("DELETE ALL %d TXQ MBXs\n",n);
     while(!TXQ.empty()){
         mbx tmp=std::move(TXQ.front());
         TXQ.pop();
         tmp.ack();
     }
     TXQ={};
-    VARK_PRINT1("TXQ CLEARED FH=%u\n",_HAL_getFreeHeap()); 
+    VARK_PRINT4("TXQ CLEARED FH=%u\n",_HAL_getFreeHeap()); 
     _fragments.clear();
     _fragments.shrink_to_fit();
-    VARK_PRINT1("FRAGMENTS CLEARED FH=%u\n",_HAL_getFreeHeap()); 
+    VARK_PRINT4("FRAGMENTS CLEARED FH=%u\n",_HAL_getFreeHeap());
+#if AARD_DEBUG
     mbx::dump();
-    VARK_PRINT1("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
+    VARK_PRINT4("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
+#endif
     for(auto const& p:mbx::pool) ::free(p);
     mbx::pool.clear();
-    VARK_PRINT1("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
+    VARK_PRINT4("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
     if(_cbDisconnect) _cbDisconnect(r);
-}
-
-void AardvarkTCP::serverConnect() {
-    Serial.printf("serverConnect\n");
-    if(!connected()){
-        if(!_URL) return _cbError(VARK_NO_SERVER_DETAILS,0);
-        VARK_PRINT1("CONNECTING to %s:%d secure=%d FH=%u\n",_URL->host,_URL->port,_URL->secure,_HAL_getFreeHeap());
-        #if ASYNC_TCP_SSL_ENABLED
-            connect(_URL->host, _URL->port, _URL->secure);
-        #else
-            if(_URL->secure) _cbError(VARK_TLS_NO_SSL,0);
-            else connect(_URL->host, _URL->port);
-        #endif
-    }
-}
-
-void AardvarkTCP::serverDisconnect(bool force) {
-    VARK_PRINT1("USER DCX\n");
-    close(force);
-    if(!connected()) _cbError(VARK_TCP_DISCONNECTED,0);
-}
-
-void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
-   VARK_PRINT4("ACK! nTXQ=%d ACK LENGTH=%d _secure=%d\n",TXQ.size(),len,_URL->secure);
-    size_t amtToAck=len;
-    while(amtToAck){
-        if(!TXQ.empty()){
-            mbx tmp=std::move(TXQ.front());
-            tmp._dump(tmp.len);
-            TXQ.pop();
-            VARK_PRINT4("amt2ack=%d _secure=%d sub=%d leaving %d\n",amtToAck,_URL->secure,_ackSize(tmp.len),amtToAck-_ackSize(tmp.len));
-            amtToAck-=_ackSize(tmp.len);
-            tmp.ack();
-        } else break;
-    }
-    _runTXQ();
 }
 
 void  AardvarkTCP::_parseURL(const std::string& url){
@@ -182,32 +136,24 @@ void  AardvarkTCP::_parseURL(const std::string& url){
         std::vector<std::string> vs=split(url,"//");
         _URL = new URL;
         _URL->secure=url.find("https",0)!=std::string::npos;
-        _URL->scheme = new char[vs[0].size()+3];
-        strcpy(_URL->scheme,(vs[0]+"//").c_str());
-        Serial.printf("scheme %s\n", _URL->scheme);
-        std::vector<std::string> vs2=split(vs[1],"?");
 
-        std::string query=vs2.size()>1 ? urlencode(vs2[1]):"";
-        _URL->query = new char[1+(query.size())];
-        strcpy(_URL->query,CSTR(query));
-        Serial.printf("query %s\n", _URL->query);
+        _URL->scheme=vs[0]+"//";
+        VARK_PRINT4("scheme %s\n", _URL->scheme.data());
+
+        std::vector<std::string> vs2=split(vs[1],"?");
+        _URL->query=vs2.size()>1 ? urlencode(vs2[1]):"";
+        VARK_PRINT4("query %s\n", _URL->query.data());
 
         std::vector<std::string> vs3=split(vs2[0],"/");
-        std::string path("/");
-        path+=vs3.size()>1 ? join(std::vector<std::string>(++vs3.begin(),vs3.end()),"/"):"";
-
-        _URL->path = new char[1+(path.size())];
-        strcpy(_URL->path,CSTR(path));
-        Serial.printf("path %s\n", _URL->path);
+        _URL->path=string("/")+((vs3.size()>1) ? join(std::vector<std::string>(++vs3.begin(),vs3.end()),"/"):"");
+        VARK_PRINT4("path %s\n", _URL->path.data());
 
         std::vector<std::string> vs4=split(vs3[0],":");
+        _URL->port=vs4.size()>1 ? atoi(vs4[1].data()):(_URL->secure ? 443:80);
+        VARK_PRINT4("port %d\n", _URL->port);
 
-        _URL->port=vs4.size()>1 ? atoi(CSTR(vs4[1])):(_URL->secure ? 443:80);
-        Serial.printf("port %d\n", _URL->port);
-
-        _URL->host=new char[1+vs4[0].size()];
-        strcpy(_URL->host,CSTR(vs4[0]));
-        Serial.printf("host %s\n\n",_URL->host);
+        _URL->host=vs4[0];
+        VARK_PRINT4("host %s\n\n",_URL->host.data());
     }
 }
 
@@ -228,7 +174,7 @@ void AardvarkTCP::_release(mbx m){
         _runTXQ();
     } 
     else {//if(canSend()){
-        VARK_PRINT1("----> TX %d bytes (can send=%d)\n",m.len,canSend());
+        VARK_PRINT1("----> TX %d bytes\n",m.len);
         add((const char*) m.data,m.len); // ESPAsyncTCP is WRONG on this, it should be a uint8_t*
         send();
     }
@@ -238,6 +184,7 @@ void  AardvarkTCP::_runTXQ(){ if(!TXQ.empty()) _release(std::move(TXQ.front()));
 //
 //  PUBLIC
 //
+#if AARD_DEBUG
 void AardvarkTCP::dump(){ 
     Serial.printf("DUMP ALL %d POOL BLOX (1st 32 only)\n",mbx::pool.size());
     mbx::dump(32);
@@ -255,10 +202,58 @@ void AardvarkTCP::dump(){
     for(auto & p:_fragments) Serial.printf("MBX 0x%08x len=%d\n",(void*) p.data,p.len);
     Serial.printf("\n");
 }
+#endif
+
+void AardvarkTCP::rxstring(VARK_FN_RXSTRING f){ 
+    _rxfn=[=](const uint8_t* data, size_t len){
+        std::string x((const char*) data,len);
+        ::free((void*) data);
+        f(x);
+    }; 
+}
+
+void AardvarkTCP::TCPconnect() {
+    if(!connected()){
+        if(!_URL) return _cbError(VARK_NO_SERVER_DETAILS,0);
+        VARK_PRINT1("CONNECTING to %s:%d secure=%d FH=%u\n",_URL->host.data(),_URL->port,_URL->secure,_HAL_getFreeHeap());
+        #if ASYNC_TCP_SSL_ENABLED
+            connect(_URL->host.data(), _URL->port, _URL->secure);
+        #else
+            if(_URL->secure) _cbError(VARK_TLS_NO_SSL,0);
+            else connect(_URL->host.data(), _URL->port);
+        #endif
+    }
+}
+
+void AardvarkTCP::TCPdisconnect(bool force) {
+    VARK_PRINT1("USER DCX\n");
+    close(force);
+    if(!connected()) _cbError(VARK_TCP_DISCONNECTED,0);
+}
+
+void AardvarkTCP::TCPurl(const char* url,const uint8_t* fingerprint){
+    _parseURL(url);
+    VARK_PRINT4("secure=%d\n",_URL->secure);
+    if(_URL->secure){
+    #if ASYNC_TCP_SSL_ENABLED
+        if(fingerprint) memcpy(_fingerprint, fingerprint, SHA1_SIZE);
+        else _cbError(VARK_TLS_NO_FINGERPRINT,0);
+    #else
+        _cbError(VARK_TLS_NO_SSL,0);
+    #endif
+    }
+    else {
+        if(fingerprint) _cbError(VARK_TLS_UNWANTED_FINGERPRINT,0);
+    }
+}
 
 void AardvarkTCP::txdata(const uint8_t* d,size_t len,bool copy){
-    Serial.printf("TXQ len=%d 0x%08x %d\n",TXQ.size(),d,len);
-    TXQ.emplace((uint8_t*) d,len,copy);
-    dump();
-    _runTXQ();
+    VARK_PRINT4("TXQ D/L Q=%d 0x%08x copy=%d\n",TXQ.size(),d,len);
+    txdata(mbx((ADFP) d,len,copy));
+}
+
+void AardvarkTCP::txdata(mbx m){
+    VARK_PRINT4("TXQ MBX len=%d 0x%08x %d\n",TXQ.size(),m.data,m.len);
+    TXQ.push(m);
+    if(TXQ.size()==1) _release(m);
 }

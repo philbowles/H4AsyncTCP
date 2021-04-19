@@ -48,14 +48,14 @@ void setup(){
     Serial.begin(115200);
     Serial.printf("Clean Compile Tester %s\n",LIBRARY);
 
-    mp.onServerConnect([]{ 
+    mp.onTCPconnect([]{ 
       Serial.printf("User: Connected to %s max payload %d\n",URL,mp.getMaxPayloadSize());
-      T1.once_ms(10000,[=](){ mp.serverDisconnect(); });
+      T1.once_ms(10000,[=](){ mp.TCPdisconnect(); });
     });
-    mp.onServerDisconnect([](int8_t reason){ Serial.printf("User: Disconnected from %s (reason %d)\n",URL,reason); });
-    mp.onServerError(AardvarkErrors);
-    mp.serverURL(URL);
-    mp.serverConnect();
+    mp.onTCPdisconnect([](int8_t reason){ Serial.printf("User: Disconnected from %s (reason %d)\n",URL,reason); });
+    mp.onTCPerror(AardvarkErrors);
+    mp.TCPurl(URL);
+    mp.TCPconnect();
 }
 
 void loop() {}
