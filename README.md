@@ -2,88 +2,106 @@
 
 # ArduinoIDE Asynchronous TCP client library for ESP8266, ESP32
 
-## Version 0.0.0
+## Version 0.1.0
 
 ---
 
-***This is not even "Alpha": you should only be here if you have been personally requested by me! It's just a placeholder until the final version is ready for release, so please, IGNORE IT!***
+Current status: Pretty solid, perhaps a few edge / corner cases still lurking, but generally very close to "final". After all, it started life as the working core of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT)) and that's been pretty solid for  fair while.
 
-Current status: Pretty solid, perhaps a few edge / corner case left, but generally very close to "ready" (it was, after all, the working core of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT))
+---
 
-TODO:
-* Reintegrate with [PangolinMQTT](https://github.com/philbowles/PangolinMQTT). In theory its easy but its actually quite tricky as we have to add back in all the MQTT-specific low-level memory blocking in a way that preserves the now "neutral" protocol-agnostic memory management method.
-* Full systematic re-test of *all* pangolin features especially the large packet stuff. (straightfoward long-winded tedium)
-* wrap / encapsulate into an H4 "Plugin" (see [H4/Plugins](https://github.com/philbowles/h4plugins) ) ready for its next major release (quite tricky)
-  
-# What it will do when it's ready ("real soon now")
+# Contents
 
-On its own, not a lot. It i designed tobe "inherited from" and both [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) and [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) use it as their core Async TCP driver. So if you want to use either of those, or [H4/Plugins](https://github.com/philbowles/h4plugins) which sist on top of them both, you will need it no matter what.
 
-It's also useful if you want to write your own Async protocol handler, as 90% of the hard bits have already been done for you. The whole process is reduced to:
+# What does it do?
+
+On its own, not a lot and to change that you need to be a reasonable C++ programmer. It is designed as an abstract base class and both [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) and [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) use it as their core Async TCP driver. So if you want to use either of those, (or [H4/Plugins](https://github.com/philbowles/h4plugins) which sits on top of them both, you will need it anyway, even if you are not going to write your own sub-class.
+
+It's useful if you want to write your own Async protocol handler, as 90% of the hard bits have already been done for you. For example both the bugs and differences in the traditional ESPAsyncTCP (for ESP8266) and AsyncTCP (for ESP32) have been ironed out, so that there is a single common interface for all your Async TCP apps from now on. The whole process is reduced to:
 
 * set up server URL
 * set up RX function to receive data
+* connect to server
 * send some data
 
-AardvarkTCP extends the popular [ESPAsyncTCP](blah) and [AsyncTCP] libraries. It adds *huge** packet fragmentation on transmit (TX), and reassembly of *huge** packets on receive (RX). It also fixes at least two fatal bugs in [ESPAsyncTCP](blah) which cause significant issue when trying to implement robust apps on top of that library. The full [ESPAsyncTCP](blah) API is provided, plus some extremely useful additions.
+Where permitted by the calling library, TLS* is available merely by using "https" in the server URL rather than "http"
 
-*By "huge" we mean any packet that is larger than the total LwIP buffers. If you compile with the "Low Memory" option this will be 1072 bytes or 2920 with the "Higher Bandwith" options (as of Apr 2021)
+One of the main benefits that that the pre-requisite forked versions of the Async Libraries ( [Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master) and [Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master) ) is *huge** packet fragmentation on transmit (TX), and reassembly of *huge** packets on receive (RX). 
 
-LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation independent and *could* change in the future, so "hardcoding any of them into your own app if you needed to do your own fragmentation/reassembly routine would be a **bad idea** as it could cause problmes in the future or prevent you code running on newer / different machines.
+It also fixes at least two fatal bugs in ESPAsyncTCP (for ESP8266) which cause significant issues when trying to implement robust apps on top of that library and adds missing features to AsyncTCP (for ESP32). It still exposes the entire "old-style" API from the broken original libraries, to ease porting of any exisitng code you may have. Having sai that, once you see how easy it is to use, you will almost certainly dispense with any old-style calls.
 
-AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, no matter what any of those LwIP "magic numbers" above are. It also provides a very simple interface which seamlessly manages both normal, unencrypted and TLS-encrypted sessions, depending on the URL provided.
+*By "huge" we mean any packet that is larger than the total LwIP buffer space. For example on ESP8266, if you compile with the "Low Memory" option this will be 1072 bytes or 2920 with the "Higher Bandwith" options (as of Apr 2021)
 
+![lwip](assets/lwip.jpg)
+
+LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation-dependent and *could* change in the future, so "hardcoding" any of them into your own app would be a **bad idea** as it could cause problmes in the future or prevent you code running on newer / different machines.
+
+AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, no matter what any of those LwIP "magic numbers" above are. As an example, here it is running "underneath" [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) on an ESP8266 and allowing that lib to send and receive a 22kb+(!) MQTT packet
+
+![twentytwo](assets/twentytwo.jpg)
+
+On ESP32 this can grow to over 50kb
+
+![fiftyk](assets/fiftyk.jpg)
+
+---
 ## Worth 1000 words:
 
-Apart from the whole of the ESPAsyncTCP API which is exposed for compatibility should you need it (you won't!), the entire API is:
+Other than the ESPAsyncTCP/AsynTCP API which is exposed for compatibility should you need it (you won't!), the entire AardvarkTCP API is:
 
 ```cpp
-size_t  getMaxPayloadSize();
+size_t  getMaxPayloadSize(){ return _maxpl; }
 void    onTCPconnect(VARK_cbConnect callback);
 void    onTCPdisconnect(VARK_cbDisconnect callback);
 void    onTCPerror(VARK_cbError callback);
-void    rx(VARK_FN_RXDATA f); // name a function taking const uint8_t* d,size_t len that will receieve data (whenever)
+void    onTCPpoll(VARK_cbPoll callback);
+void    rx(VARK_FN_RXDATA f);
 void    TCPconnect();
 void    TCPdisconnect(bool force = false);
 void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
-void    tx(const uint8_t* d,size_t len,bool copy=true); // send some data
+void    txdata(mbx m);
+void    txdata(const uint8_t* d,size_t len,bool copy=true);
 
 ```
 
 Two questions:
+
 1) Could it get any simpler?
-2) Why should it ever need to?
+2) Why should it ever need to be?
 
 ---
 
-# The "menagerie"
+# The "menagerie" roadmap
 
 AardvarkTCP is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
 
-![roadmap](assets/menagerie.jpg)
+![roadmap](assets/common/menagerieroadmap.jpg)
 
-## The related libraries
+## The related / dependent libraries
 
 || Name | Provides | Notes |
 | :---: | :----------  | :--- | :--- |
-|![roadmap](assets/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers| |
-||[Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master)|"Glue" to LwIP| Important bugfixes |
+||[Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master)|"Glue" to LwIP (ESP8266)| Important bugfixes |
+||[Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master)|"Glue" to LwIP(ESP32)| Missing features added |
 ||[Forked ESPAsyncWebserver](https://github.com/philbowles/ESPAsyncWebServer)| Basis of webUI in H4Plugins| Several major bugfixes |
-|![roadmap](assets/aardvark_icon.jpg)|[AardvarkTCP](https://github.com/philbowles/AardvarkTCP)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
-|![roadmap](assets/pangolin_icon.jpg)|[PangolinMQTT](https://github.com/philbowles/PangolinMQTT)|Async MQTT Client|QoS 0/1/2 Fully 3.1.1 compliant. Large payloads |
-|![roadmap](assets/armadillo_icon.jpg)|[ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)|Async HTTP/S Client| Simple send/callback of large payloads |
-|![roadmap](assets/h4p_icon.jpg)|[H4/Plugins](https://github.com/philbowles/h4plugins)|Full Async IOT Firmware| Webserver, MQTT, OTA, NTP, HTTP etc etc |
+|![roadmap](assets/common/tools_icon.jpg)|[PMB Tools](https://github.com/philbowles/pmbtools)|'32/'8266 HAL and utility functions| |
+|![roadmap](assets/common/aardvark_icon.jpg)|[AardvarkTCP](https://github.com/philbowles/AardvarkTCP)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
+|![roadmap](assets/common/pangolin_icon.jpg)|[PangolinMQTT](https://github.com/philbowles/PangolinMQTT)|Async MQTT Client|QoS 0/1/2 Fully 3.1.1 compliant. Large payloads |
+|![roadmap](assets/common/armadillo_icon.jpg)|[ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)|Async HTTP/S Client| Simple send/callback of large payloads |
+|![roadmap](assets/common/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers| |
+|![roadmap](assets/common/h4p_icon.jpg)|[H4/Plugins](https://github.com/philbowles/h4plugins)|Full Async IOT Firmware| Webserver, MQTT, OTA, NTP, HTTP etc etc |
 
 ---
 
 # History / Origin
 
-AardvarkTCP is in essence the blue portion of the following diagram, chopped out of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) so as a "core concept" is has been working well for quite a while
+AardvarkTCP is in essence the blue portion of the following diagram, chopped out of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) so as a "core concept" it has been working well for quite a while.
+
 In that role it allowed for huge payloads (up to 1/2 the available Free Heap) to be sent and received over MQTT. It fragments the outgoing packets into message blocks small enough to fit whatever LwIP buffers your implementation has configured (without you having to worry or even know what they are) and acts a flow-control manager to synchronise the real-time to-ing, fro-ing and ACK-ing of Asynchronous TCP in the background. It does the reverse for huge incoming messages, which can only arrive - by definition - one LwIP buffer-full at a time. It then reassembles all the fragments into one huge packet and passes it to the MQTT protocol analyser.
 
-No other library known to the author for ESP8266 / ESP32 can do this for MQTT and it does it seamlessly over TLS for HTTPS or unencrypted HTTP. From the user's point-of-view you just "send a large packet" or "receive a large packet" - *which is the way it should be!*
+No other library known to the author for ESP8266 / ESP32 can do this for MQTT and it does it seamlessly over TLS for HTTPS(ESP8266 only) or unencrypted HTTP (ESP8266 and ESP32). From the user's point-of-view you just "send a large packet" or "receive a large packet" - *which is the way it should be!*
 
-It is not much of a leap to realise tha the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or SOMEOTHEREXAMPLE, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP). (The diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
+It is not much of a leap to realise tha the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or Thingspeaj etc, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) - which you could visualise as the diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
 
 ![mbm](assets/origin.jpg)
 
@@ -93,7 +111,7 @@ It is not much of a leap to realise tha the same functionality is ideal for asyn
 
 ## IMPORTANT NOTE FOR PLATFORMIO USERS
 
-Pangolin is an *Arduino library*, and is 100% compatible with the ArduinoIDE and its build system. PlatformIO, sadly, ***is not***. If PlatformIO has problems with code that compiles and runs correctly under ArduinoIDE, then it is a ***PlatformIO problem***, not an issue with this - or any other - valid Arduino library.
+ArdvarkTCP is an *ArduinoIDE library*, and is 100% compatible with the ArduinoIDE and its build system. PlatformIO, sadly, ***is not***. If PlatformIO has problems with code that compiles and runs correctly under ArduinoIDE, then it is a ***PlatformIO problem***, not an issue with this - or any other - valid Arduino library, so please contact *them*, not *me*.
 
 For this reason, I will not accept any issues relating to build problems with PlatformIO, nor any pull requests nor other suggestions which involve any changes that render this library less than 100% ArduinoIDE compatible.
 
@@ -117,7 +135,6 @@ This is open-source, I do it in my own time, for free. If you want professional-
 
 ## Find me daily in these FB groups
 
-* [Pangolin Support](https://www.facebook.com/groups/AardvarkTCP/)
 * [ESP8266 & ESP32 Microcontrollers](https://www.facebook.com/groups/2125820374390340/)
 * [ESP Developers](https://www.facebook.com/groups/ESP8266/)
 * [H4/Plugins support](https://www.facebook.com/groups/h4plugins)

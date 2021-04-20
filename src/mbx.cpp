@@ -23,7 +23,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 #include"mbx.h"
-#include<AardvarkUtils.h>
+#include <pmbtools.h>
 
 VARK_MEM_POOL       mbx::pool;
 //
@@ -53,25 +53,25 @@ void mbx::clear(ADFP p){
     if(pool.count(p)) {
         free(p);
         pool.erase(p);
-        VARK_PRINT4("MBX DEL BLOCK 0x%08x FH=%u\n",p,_HAL_getFreeHeap());
+        VARK_PRINT4("MBX DEL BLOCK 0x%08x FH=%u\n",p,_HAL_maxHeapBlock());
     }
 }
 
 void mbx::clear(){ clear(data); }
 
 void mbx::emptyPool(){
-    VARK_PRINT4("MBX EMPTY POOL len=%d FH=%u\n",pool.size(),_HAL_getFreeHeap());
+    VARK_PRINT4("MBX EMPTY POOL len=%d FH=%u\n",pool.size(),_HAL_maxHeapBlock());
     for(auto const& p:pool) clear(p);
     pool.clear();
 }
 
 uint8_t* mbx::getMemory(size_t size){
-//    if(size > _HAL_maxPayloadSize()) return nullptr;
+    if(size > _HAL_maxPayloadSize()) return nullptr;
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
         pool.insert(mm);
         VARK_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-    } else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u FM=%u\n",ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
+    } //else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u FM=%u\n",ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
     return mm;
 }
 

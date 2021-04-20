@@ -23,29 +23,31 @@ SOFTWARE.
 */
 #pragma once
 
-#include"vark_config.h"
+#include<vark_config.h>
 
 #include<Arduino.h>
-#include<ESP8266WiFi.h>
 
 #include<functional>
 #include<string>
+#include<vector>
 #include<map>
 #include<queue>
-#include<vector>
+
+#include<pmbtools.h>
 
 #ifdef ARDUINO_ARCH_ESP32
-#include <AsyncTCP.h> /// no tls yet
-#elif defined(ARDUINO_ARCH_ESP8266)
-#include <ESPAsyncTCP.h>
+//    #pragma message("ESP32: using AsyncTCP")
+    #include<WiFi.h>
+    #include<AsyncTCP.h> /// no tls yet
+#else
+//    #pragma message("ESP8266: using ESPAsyncTCP")
+    #include<async_config.h> // for the ssl
+    #include<ESP8266WiFi.h>
+    #include <ESPAsyncTCP.h>
     #if ASYNC_TCP_SSL_ENABLED
-        #include <tcp_axtls.h>
+        #include<tcp_axtls.h>
         #define SHA1_SIZE 20
     #endif
-#elif defined(ARDUINO_ARCH_STM32)
-#include <STM32AsyncTCP.h>
-#else
-#error Platform not supported
 #endif
 
 extern void dumphex(const uint8_t*,size_t);
@@ -70,8 +72,8 @@ extern void dumphex(const uint8_t*,size_t);
     #define VARK_PRINT3(...)
     #define VARK_PRINT4(...)
 
-    #define PANGO_DUMP3(...)
-    #define PANGO_DUMP4(...)
+    #define VARK_DUMP3(...)
+    #define VARK_DUMP4(...)
 #endif
 
 enum VARK_FAILURE : uint8_t {
@@ -83,11 +85,10 @@ enum VARK_FAILURE : uint8_t {
     VARK_TLS_UNWANTED_FINGERPRINT,
     VARK_NO_SERVER_DETAILS,
     VARK_INPUT_TOO_BIG,
-    VARK_MEMORY_TOO_BIG,
     VARK_MAX_ERROR
 };
 
-#define DEFAULT_RX_TIMEOUT 1                    // Seconds for timeout
+//#define DEFAULT_RX_TIMEOUT 1                    // Seconds for timeout
 /*
 err_enum_t {
   ERR_OK = 0, ERR_MEM = -1, ERR_BUF = -2, ERR_TIMEOUT = -3,
@@ -97,14 +98,12 @@ err_enum_t {
   ERR_ARG = -16
 }
 */
-
 using VARK_DELAYED_FREE = uint8_t*;
 using ADFP              = VARK_DELAYED_FREE; // SOOO much less typing - ARMA "delayed free" pointer
 
 #include<mbx.h>
 
 using VARK_FN_RXDATA    = std::function<void(const uint8_t*,size_t)>;
-//using VARK_FN_RXSTRING  = std::function<void(const std::string&)>;
 
 class mbx;
 
@@ -139,7 +138,6 @@ class AardvarkTCP: public AsyncClient {
             VARK_cbError        _cbError=[](int e,int i){};
             VARK_cbPoll         _cbPoll=nullptr;
             VARK_FRAGMENTS      _fragments;
-            size_t              _space;
      static size_t              _maxpl;
 
             size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
@@ -157,7 +155,6 @@ class AardvarkTCP: public AsyncClient {
             void                _parseURL(const std::string& url);
     public:
         AardvarkTCP();
-//        ~AardvarkTCP();       singleton, lifetime of app: never called
 
             void                dump(); // null if no debug
 //
@@ -167,13 +164,11 @@ class AardvarkTCP: public AsyncClient {
             void                onTCPerror(VARK_cbError callback){ _cbError=callback; }
             void                onTCPpoll(VARK_cbPoll callback){ _cbPoll=callback; }
             void                rx(VARK_FN_RXDATA f){ _rxfn=f; }
-//            void                rxstring(VARK_FN_RXSTRING f);
             void                TCPconnect();
             void                TCPdisconnect(bool force = false);
             void                TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
             void                txdata(mbx m);
             void                txdata(const uint8_t* d,size_t len,bool copy=true);
-            void                txstring(const std::string& s,bool copy=true){ txdata((const uint8_t*) s.c_str(),s.size(),copy); }
 //
 //              DO NOT CALL ANY FUNCTION STARTING WITH UNDERSCORE!!! _
 //
