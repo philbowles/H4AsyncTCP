@@ -48,20 +48,30 @@ SOFTWARE.
 #error Platform not supported
 #endif
 
+extern void dumphex(const uint8_t*,size_t);
+
 #if VARK_DEBUG
     template<int I, typename... Args>
     void VARK_PRINT(const char* fmt, Args... args) {
         if (VARK_DEBUG >= I) Serial.printf(std::string(std::string("AARD:%d: ")+fmt).c_str(),I,args...);
     }
-  #define VARK_PRINT1(...) VARK_PRINT<1>(__VA_ARGS__)
-  #define VARK_PRINT2(...) VARK_PRINT<2>(__VA_ARGS__)
-  #define VARK_PRINT3(...) VARK_PRINT<3>(__VA_ARGS__)
-  #define VARK_PRINT4(...) VARK_PRINT<4>(__VA_ARGS__)
+    #define VARK_PRINT1(...) VARK_PRINT<1>(__VA_ARGS__)
+    #define VARK_PRINT2(...) VARK_PRINT<2>(__VA_ARGS__)
+    #define VARK_PRINT3(...) VARK_PRINT<3>(__VA_ARGS__)
+    #define VARK_PRINT4(...) VARK_PRINT<4>(__VA_ARGS__)
+
+    template<int I>
+    void vark_dump(const uint8_t* p, size_t len) { if (VARK_DEBUG >= I) dumphex(p,len); }
+    #define VARK_DUMP3(p,l) vark_dump<3>((p),l)
+    #define VARK_DUMP4(p,l) vark_dump<4>((p),l)
 #else
-  #define VARK_PRINT1(...)
-  #define VARK_PRINT2(...)
-  #define VARK_PRINT3(...)
-  #define VARK_PRINT4(...)
+    #define VARK_PRINT1(...)
+    #define VARK_PRINT2(...)
+    #define VARK_PRINT3(...)
+    #define VARK_PRINT4(...)
+
+    #define PANGO_DUMP3(...)
+    #define PANGO_DUMP4(...)
 #endif
 
 enum VARK_FAILURE : uint8_t {
@@ -94,7 +104,7 @@ using ADFP              = VARK_DELAYED_FREE; // SOOO much less typing - ARMA "de
 #include<mbx.h>
 
 using VARK_FN_RXDATA    = std::function<void(const uint8_t*,size_t)>;
-using VARK_FN_RXSTRING  = std::function<void(const std::string&)>;
+//using VARK_FN_RXSTRING  = std::function<void(const std::string&)>;
 
 class mbx;
 
@@ -132,19 +142,18 @@ class AardvarkTCP: public AsyncClient {
             size_t              _space;
      static size_t              _maxpl;
 
+            size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
+            void                _busted(size_t len);
+            void                _clearFragments();
+            void                _ackTCP(size_t len,uint32_t time);
             void                _onData(uint8_t* data, size_t len);
             void                _onDisconnect(int8_t r);
-
-            size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
-            void                _ackTCP(size_t len,uint32_t time);
-            void                _runTXQ();
             void                _release(mbx m);
+     inline void                _runTXQ();
 
             VARK_FN_RXDATA      _rxfn=[](const uint8_t* data, size_t len){};
     protected:
             URL*                _URL;
-
-//            void                _HAL_feedWatchdog();
             void                _parseURL(const std::string& url);
     public:
         AardvarkTCP();
@@ -158,8 +167,7 @@ class AardvarkTCP: public AsyncClient {
             void                onTCPerror(VARK_cbError callback){ _cbError=callback; }
             void                onTCPpoll(VARK_cbPoll callback){ _cbPoll=callback; }
             void                rx(VARK_FN_RXDATA f){ _rxfn=f; }
-            void                rxstring(VARK_FN_RXSTRING f);
-
+//            void                rxstring(VARK_FN_RXSTRING f);
             void                TCPconnect();
             void                TCPdisconnect(bool force = false);
             void                TCPurl(const char* url,const uint8_t* fingerprint=nullptr);

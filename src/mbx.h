@@ -46,8 +46,9 @@ class mbx {
         virtual void            ack();
                 void            clear();
         static  void            clear(ADFP);
+        static  void            emptyPool();
         static  uint8_t*        getMemory(size_t size);
-#if AARD_DEBUG 
+#if VARK_DEBUG 
         static  void            dump(size_t n=64);
 
                 void            _dump(size_t n=10000);

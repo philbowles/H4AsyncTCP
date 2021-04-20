@@ -45,7 +45,8 @@ AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
     #endif
         _space=space();
         _maxpl=(_HAL_getFreeHeap() / 2 ) - VARK_HEAP_SAFETY;
-        VARK_PRINT1("Connected space=%u Max packet size %d\n",space(),getMaxPayloadSize());
+        VARK_PRINT1("Connected space=%u Max packet size %d\n",_space,getMaxPayloadSize());
+        VARK_PRINT1("Connected space=%u Max packet size %d TCP_MSS=%d SND_BUF=%d TCP_WND=%d\n",_space,getMaxPayloadSize(),TCP_MSS,TCP_SND_BUF,TCP_WND);
         if( _cbConnect)  _cbConnect();
     });
     onDisconnect([this](void* obj, AsyncClient* c) { VARK_PRINT1("TCP onDisconnect\n"); _onDisconnect(VARK_TCP_DISCONNECTED); });
@@ -70,65 +71,77 @@ void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
     _runTXQ();
 }
 
+void AardvarkTCP::_busted(size_t len) {
+    VARK_PRINT4("BUSTED: REQUEST=%d MPL=%d FH=%u MXBLK=%u FM=%u\n",len,getMaxPayloadSize(),ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
+    _clearFragments();
+    mbx::emptyPool();
+    _cbError(VARK_INPUT_TOO_BIG,len);
+}
+
+void AardvarkTCP::_clearFragments() {
+    VARK_PRINT4("CLRFRAG B4 N=%d FH=%u\n",_fragments.size(),_HAL_getFreeHeap());
+    for(auto &f:_fragments) f.clear();
+    _fragments.clear();
+    _fragments.shrink_to_fit();
+    VARK_PRINT4("CLRFRAG AFTER   FH=%u\n",_HAL_getFreeHeap());
+}
+
 void AardvarkTCP::_onData(uint8_t* data, size_t len) {
     static uint32_t stored=0;
     VARK_PRINT1("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,isRecvPush(),stored,_HAL_getFreeHeap());
 //    VARK_DUMP4(data,len);
-    if(getMaxPayloadSize() > stored+len){ // = sigma fragmets so far + current fragment 
+//    if(getMaxPayloadSize() > stored+len){ // = sigma fragmets so far + current fragment 
         if(isRecvPush() || _URL->secure){
-            uint8_t* bpp=static_cast<uint8_t*>(malloc(stored+len));
-            uint8_t* p=bpp;
-            for(auto &f:_fragments){
-                memcpy(p,f.data,f.len);
-                VARK_PRINT4("RECREATE %08X len=%d FH=%u\n",f.data,f.len,_HAL_getFreeHeap());
-                p+=f.len;
-                f.clear();
+            if(!stored && (len < TCP_MSS)) _rxfn(data,len);// { ///////////// WARNING!!!!!!!!!!!!!!!!!! HARDCODE 2 IS NIGHTMARE WAITING TO HAPPEN
+            else {
+                uint8_t* bpp=mbx::getMemory(stored+len);
+                VARK_PRINT4("WTAFFF? %08X stored+len=%d FH=%u\n",bpp,stored+len,_HAL_getFreeHeap());
+                if(bpp){
+                    uint8_t* p=bpp;
+                    for(auto &f:_fragments){
+                        memcpy(p,f.data,f.len);
+                        VARK_PRINT4("RECREATE %08X len=%d FH=%u\n",f.data,f.len,_HAL_getFreeHeap());
+                        p+=f.len;
+                        f.clear();
+                    }
+                    _clearFragments();
+                    memcpy(p,data,len);
+                    VARK_PRINT4("CALL USER %08X stored=%d len=%d sum=%d FH=%u\n",bpp,stored,len,stored+len,_HAL_getFreeHeap());
+                    _rxfn(bpp,stored+len);
+                    mbx::clear(bpp);
+                    stored=0;
+                    VARK_PRINT4("BACK FROM USER FH=%u\n",_HAL_getFreeHeap());
+                } else _busted(stored+len);
             }
-            _fragments.clear();
-            _fragments.shrink_to_fit();
-            memcpy(p,data,len);
-            VARK_PRINT4("RUN WITH %08X stored=%d len=%d sum=%d FH=%u\n",bpp,stored,len,stored+len,_HAL_getFreeHeap());
-            _rxfn(bpp,stored+len);
-            ::free(bpp);
-            stored=0;
-            VARK_PRINT4("BACK FROM USR FH=%u\n",_HAL_getFreeHeap());
         }
         else {
             _fragments.emplace_back(data,len,true);
             stored+=len;
             VARK_PRINT4("CR FRAG %08X len=%d stored=%d\n",_fragments.back().data,_fragments.back().len,stored);
         }
-    }
-    else {
-        VARK_PRINT4("MPL=%d stored+len=%d FH=%u\n",getMaxPayloadSize(),stored+len,_HAL_getFreeHeap());
-        _cbError(VARK_INPUT_TOO_BIG,stored+len);
-        TCPdisconnect(true);
-    }
+ //   } else _busted(stored+len);
 }
 
 void AardvarkTCP::_onDisconnect(int8_t r) {
     VARK_PRINT1("ON DISCONNECT FH=%u r=%d\n",_HAL_getFreeHeap(),r); 
-    auto n=TXQ.size();
-    VARK_PRINT4("DELETE ALL %d TXQ MBXs\n",n);
+
+    VARK_PRINT4("DELETE ALL %d TXQ MBXs\n",TXQ.size());
     while(!TXQ.empty()){
         mbx tmp=std::move(TXQ.front());
         TXQ.pop();
         tmp.ack();
     }
     TXQ={};
-    VARK_PRINT4("TXQ CLEARED FH=%u\n",_HAL_getFreeHeap()); 
-    _fragments.clear();
-    _fragments.shrink_to_fit();
+    VARK_PRINT4("TXQ CLEARED FH=%u\n",_HAL_getFreeHeap());
+
+    _clearFragments();
     VARK_PRINT4("FRAGMENTS CLEARED FH=%u\n",_HAL_getFreeHeap());
-#if AARD_DEBUG
-    mbx::dump();
+
     VARK_PRINT4("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
-#endif
-    for(auto const& p:mbx::pool) ::free(p);
-    mbx::pool.clear();
-    VARK_PRINT4("SANITY CHECK: nMBX should=0 actual value=%d FH=%u\n",mbx::pool.size(),_HAL_getFreeHeap());
+    mbx::emptyPool();
     if(_cbDisconnect) _cbDisconnect(r);
 }
+
 
 void  AardvarkTCP::_parseURL(const std::string& url){
     if(url.find("http",0)) _parseURL(std::string("http://")+url);
@@ -184,7 +197,7 @@ void  AardvarkTCP::_runTXQ(){ if(!TXQ.empty()) _release(std::move(TXQ.front()));
 //
 //  PUBLIC
 //
-#if AARD_DEBUG
+#if VARK_DEBUG
 void AardvarkTCP::dump(){ 
     Serial.printf("DUMP ALL %d POOL BLOX (1st 32 only)\n",mbx::pool.size());
     mbx::dump(32);
@@ -203,7 +216,7 @@ void AardvarkTCP::dump(){
     Serial.printf("\n");
 }
 #endif
-
+/*
 void AardvarkTCP::rxstring(VARK_FN_RXSTRING f){ 
     _rxfn=[=](const uint8_t* data, size_t len){
         std::string x((const char*) data,len);
@@ -211,7 +224,7 @@ void AardvarkTCP::rxstring(VARK_FN_RXSTRING f){
         f(x);
     }; 
 }
-
+*/
 void AardvarkTCP::TCPconnect() {
     if(!connected()){
         if(!_URL) return _cbError(VARK_NO_SERVER_DETAILS,0);
@@ -241,14 +254,11 @@ void AardvarkTCP::TCPurl(const char* url,const uint8_t* fingerprint){
     #else
         _cbError(VARK_TLS_NO_SSL,0);
     #endif
-    }
-    else {
-        if(fingerprint) _cbError(VARK_TLS_UNWANTED_FINGERPRINT,0);
-    }
+    } else if(fingerprint) _cbError(VARK_TLS_UNWANTED_FINGERPRINT,0);
 }
 
 void AardvarkTCP::txdata(const uint8_t* d,size_t len,bool copy){
-    VARK_PRINT4("TXQ D/L Q=%d 0x%08x copy=%d\n",TXQ.size(),d,len);
+    VARK_PRINT4("TXQ D/L Q=%d 0x%08x len=%d copy=%d\n",TXQ.size(),d,len,copy);
     txdata(mbx((ADFP) d,len,copy));
 }
 

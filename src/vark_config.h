@@ -32,7 +32,7 @@ SOFTWARE.
     4 - everything
 */
 
-#define VARK_DEBUG 4
+#define VARK_DEBUG 0
 
 #define VARK_CHECK_FINGERPRINT 0
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches

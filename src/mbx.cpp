@@ -59,25 +59,30 @@ void mbx::clear(ADFP p){
 
 void mbx::clear(){ clear(data); }
 
+void mbx::emptyPool(){
+    VARK_PRINT4("MBX EMPTY POOL len=%d FH=%u\n",pool.size(),_HAL_getFreeHeap());
+    for(auto const& p:pool) clear(p);
+    pool.clear();
+}
+
 uint8_t* mbx::getMemory(size_t size){
-    if(size > _HAL_maxPayloadSize()) return nullptr;
+//    if(size > _HAL_maxPayloadSize()) return nullptr;
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
         pool.insert(mm);
         VARK_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-    }
-    else VARK_PRINT1("MBX STATUS: FH=%u MXBLK=%u FM=%u\n",ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
+    } else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u FM=%u\n",ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
     return mm;
 }
 
-#if AARD_DEBUG
+#if VARK_DEBUG
 void mbx::_dump(size_t n){ 
     Serial.printf("BLOCK 0x%08x len=%d frag=0x%08x\n",(void*) data,len,frag);
     dumphex(data,len < n ? len:n);
 }
 
 void mbx::dump(size_t n){ 
-    Serial.printf("\nPool Blox\n");
+    Serial.printf("\n%d Pool Blox\n",pool.size());
     for(auto const& p:pool){
         dumphex(p,n); // Danger, Will Robinson!!!
         Serial.println();
