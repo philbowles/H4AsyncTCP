@@ -27,8 +27,6 @@ SOFTWARE.
 
 VARK_MEM_POOL       mbx::pool;
 //
-//      x
-//
 void mbx::_create(ADFP p){
     if(managed){
         data=getMemory(len);

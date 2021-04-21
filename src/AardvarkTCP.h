@@ -87,9 +87,7 @@ enum VARK_FAILURE : uint8_t {
     VARK_INPUT_TOO_BIG,
     VARK_MAX_ERROR
 };
-
-//#define DEFAULT_RX_TIMEOUT 1                    // Seconds for timeout
-/*
+/* LwIP
 err_enum_t {
   ERR_OK = 0, ERR_MEM = -1, ERR_BUF = -2, ERR_TIMEOUT = -3,
   ERR_RTE = -4, ERR_INPROGRESS = -5, ERR_VAL = -6, ERR_WOULDBLOCK = -7,

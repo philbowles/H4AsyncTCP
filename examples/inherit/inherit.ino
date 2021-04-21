@@ -50,6 +50,7 @@ void AardvarkErrors(int e,int info){
 void setup(){
 
     Serial.begin(115200);
+    Serial.printf("pmbtools Tester unique device=%s max heap=%u\n",_HAL_uniqueName().data(),_HAL_maxHeapBlock());
     Serial.printf("Aardvark Tester %s\n",AARDVARK_VERSION);
 
     WiFi.begin("XXXXXXXX","XXXXXXXX");
