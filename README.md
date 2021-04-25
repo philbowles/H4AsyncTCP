@@ -63,9 +63,10 @@ void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
 void    TCPconnect();
 void    TCPdisconnect(bool force = false);
 // send / receive
-size_t  getMaxPayloadSize();
 void    rx(VARK_FN_RXDATA f);
 void    txdata(const uint8_t* d,size_t len,bool copy=true);
+// miscellaneous
+size_t  getMaxPayloadSize();
 
 ```
 
@@ -145,9 +146,19 @@ ESP8266 targets will happily resolve `.local` names. See "Known Issues" re ESP32
 * `https://mosquitto.local:8883` // .local only works on ESP8266 at the moment
 * `http://insecure.remote.ru:12345/long/resource/path/?data=123&moredata=456`
 
+### Using TLS
+
+TLS is only currently only available on ESP8266 targets. The first step to using TLS is to edit the [`async_config.h`](https://github.com/philbowles/ESPAsyncTCP-master/blob/master/src/async_config.h) file in [Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master/scr) and change `#define ASYNC_TCP_SSL_ENABLED 0` to `#define ASYNC_TCP_SSL_ENABLED 1`
+
+Note that this will significantly increase the size of the compiled app. Unless you absolutely need it, do not compile in TLS!
+
+Note also that the version of TLS that ships with ESPAsyncTCP is very weak and there are many sites that will refuse to connect as they require stronger ciphers or client certificates etc.
+
+![tls](assets/common/tls.jpg)
 ### TODO
 
 * Add `@username:password` basic auth scheme for e.g. [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)
+
 
 ---
 
