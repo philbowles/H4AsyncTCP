@@ -23,10 +23,7 @@ TCPconnect	KEYWORD2
 TCPdisconnect	KEYWORD2
 TCPurl	KEYWORD2
 txdata	KEYWORD2
-txdata	KEYWORD2
-
 
 #######################################
 # Constants (LITERAL1)
 #######################################
-

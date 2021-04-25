@@ -27,7 +27,7 @@ SOFTWARE.
 
 VARK_MEM_POOL       mbx::pool;
 //
-void mbx::_create(ADFP p){
+void mbx::_create(uint8_t* p){
     if(managed){
         data=getMemory(len);
         memcpy(data,p,len);
@@ -47,7 +47,7 @@ void mbx::ack(){
     clear();
 }
 
-void mbx::clear(ADFP p){
+void mbx::clear(uint8_t* p){
     if(pool.count(p)) {
         free(p);
         pool.erase(p);

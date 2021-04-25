@@ -1,4 +1,5 @@
 SOONEST:
+    urlencoding of path parts
 SOON:
     @username:password for basic auth in dillo
 MEDIUM-TERM:

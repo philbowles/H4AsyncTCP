@@ -25,6 +25,8 @@ SOFTWARE.
 #include <AardvarkTCP.h>
 
 size_t          AardvarkTCP::_maxpl;
+VARK_FRAGMENTS  AardvarkTCP::_fragments;
+VARK_MSG_Q      AardvarkTCP::_TXQ;
 
 AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
     setNoDelay(true);
@@ -38,11 +40,8 @@ AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
                     return;
                 }
             }
-        #else
-            VARK_PRINT1("WARNING! Fingerprint not checked!\n");
         #endif
     #endif
-//        _space=space();
         _maxpl=(_HAL_maxHeapBlock() / 2 ) - VARK_HEAP_SAFETY;
         VARK_PRINT1("Connected Max packet size %d TCP_MSS=%d SND_BUF=%d TCP_WND=%d\n",getMaxPayloadSize(),TCP_MSS,TCP_SND_BUF,TCP_WND);
         if( _cbConnect)  _cbConnect();
@@ -55,12 +54,12 @@ AardvarkTCP::AardvarkTCP(): _URL(nullptr),AsyncClient(){
 } 
 
 void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
-   VARK_PRINT4("ACK! nTXQ=%d ACK LENGTH=%d _secure=%d\n",TXQ.size(),len,_URL->secure);
+    VARK_PRINT4("ACK! nTXQ=%d ACK LENGTH=%d _secure=%d\n",_TXQ.size(),len,_URL->secure);
     size_t amtToAck=len;
     while(amtToAck){
-        if(!TXQ.empty()){
-            mbx tmp=std::move(TXQ.front());
-            TXQ.pop();
+        if(!_TXQ.empty()){
+            mbx tmp=std::move(_TXQ.front());
+            _TXQ.pop();
             VARK_PRINT4("amt2ack=%d _secure=%d sub=%d leaving %d\n",amtToAck,_URL->secure,_ackSize(tmp.len),amtToAck-_ackSize(tmp.len));
             amtToAck-=_ackSize(tmp.len);
             tmp.ack();
@@ -70,18 +69,15 @@ void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
 }
 
 void AardvarkTCP::_busted(size_t len) {
-//    VARK_PRINT4("BUSTED: REQUEST=%d MPL=%d FH=%u MXBLK=%u FM=%u\n",len,getMaxPayloadSize(),ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
     _clearFragments();
     mbx::emptyPool();
     _cbError(VARK_INPUT_TOO_BIG,len);
 }
 
 void AardvarkTCP::_clearFragments() {
-    VARK_PRINT4("CLRFRAG B4 N=%d FH=%u\n",_fragments.size(),_HAL_maxHeapBlock());
     for(auto &f:_fragments) f.clear();
     _fragments.clear();
     _fragments.shrink_to_fit();
-    VARK_PRINT4("CLRFRAG AFTER   FH=%u\n",_HAL_maxHeapBlock());
 }
 
 void AardvarkTCP::_onData(uint8_t* data, size_t len) {
@@ -89,10 +85,9 @@ void AardvarkTCP::_onData(uint8_t* data, size_t len) {
     VARK_PRINT1("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,isRecvPush(),stored,_HAL_maxHeapBlock());
     VARK_DUMP4(data,len);
     if(isRecvPush() || _URL->secure){
-        if(!stored && (len < TCP_MSS)) _rxfn(data,len);// { ///////////// WARNING!!!!!!!!!!!!!!!!!! HARDCODE 2 IS NIGHTMARE WAITING TO HAPPEN
+        if(!stored && (len < TCP_MSS)) _rxfn(data,len);
         else {
             uint8_t* bpp=mbx::getMemory(stored+len);
-            VARK_PRINT4("WTAFFF? %08X stored+len=%d FH=%u\n",bpp,stored+len,_HAL_maxHeapBlock());
             if(bpp){
                 uint8_t* p=bpp;
                 for(auto &f:_fragments){
@@ -121,14 +116,12 @@ void AardvarkTCP::_onData(uint8_t* data, size_t len) {
 void AardvarkTCP::_onDisconnect(int8_t r) {
     VARK_PRINT1("ON DISCONNECT FH=%u r=%d\n",_HAL_maxHeapBlock(),r); 
 
-    VARK_PRINT4("DELETE ALL %d TXQ MBXs\n",TXQ.size());
-    while(!TXQ.empty()){
-        mbx tmp=std::move(TXQ.front());
-        TXQ.pop();
+    VARK_PRINT4("DELETE ALL %d _TXQ MBXs\n",_TXQ.size());
+    while(!_TXQ.empty()){
+        mbx tmp=std::move(_TXQ.front());
+        _TXQ.pop();
         tmp.ack();
     }
-//    TXQ.clear();
-    VARK_PRINT4("TXQ CLEARED FH=%u\n",_HAL_maxHeapBlock());
 
     _clearFragments();
     VARK_PRINT4("FRAGMENTS CLEARED FH=%u\n",_HAL_maxHeapBlock());
@@ -150,7 +143,8 @@ void  AardvarkTCP::_parseURL(const std::string& url){
         VARK_PRINT4("scheme %s\n", _URL->scheme.data());
 
         std::vector<std::string> vs2=split(vs[1],"?");
-        _URL->query=vs2.size()>1 ? urlencode(vs2[1]):"";
+//        _URL->query=vs2.size()>1 ? urlencode(vs2[1]):"";
+        _URL->query=vs2.size()>1 ? vs2[1]:"";
         VARK_PRINT4("query %s\n", _URL->query.data());
 
         std::vector<std::string> vs3=split(vs2[0],"/");
@@ -162,7 +156,7 @@ void  AardvarkTCP::_parseURL(const std::string& url){
         VARK_PRINT4("port %d\n", _URL->port);
 
         _URL->host=vs4[0];
-        VARK_PRINT4("host %s\n\n",_URL->host.data());
+        VARK_PRINT4("host %s\n",_URL->host.data());
     }
 }
 
@@ -174,53 +168,25 @@ void AardvarkTCP::_release(mbx m){
         do{
             size_t toSend=std::min(TCP_MSS,bytesLeft);
             _HAL_feedWatchdog();
-            ADFP F=(--nFrags) ? (ADFP) nFrags:m.data;
-            TXQ.emplace(m.data+(m.len - bytesLeft),F,toSend,false); // very naughty, but works :)
+            uint8_t* F=(--nFrags) ? (uint8_t*) nFrags:m.data;
+            _TXQ.emplace(m.data+(m.len - bytesLeft),F,toSend,false); // very naughty, but works :)
             VARK_PRINT4("CHUNK 0x%08x frag=0x%08x len=%d\n",m.data+(m.len - bytesLeft),F,toSend);
             bytesLeft-=toSend;
         } while(bytesLeft);
-        TXQ.pop(); // hara kiri - queue is now n smaller copies of yourself!
+        _TXQ.pop(); // hara kiri - queue is now n smaller copies of yourself!
         _runTXQ();
     } 
     else {//if(canSend()){
         VARK_PRINT1("----> TX %d bytes\n",m.len);
-        add((const char*) m.data,m.len); // ESPAsyncTCP is WRONG on this, it should be a uint8_t*
+        add((const char*) m.data,m.len);
         send();
     }
 }
 
-void  AardvarkTCP::_runTXQ(){ if(!TXQ.empty()) _release(std::move(TXQ.front())); }
+void  AardvarkTCP::_runTXQ(){ if(!_TXQ.empty()) _release(std::move(_TXQ.front())); }
 //
-//  PUBLIC
+// protected
 //
-#if VARK_DEBUG
-void AardvarkTCP::dump(){ 
-    Serial.printf("DUMP ALL %d POOL BLOX (1st 32 only)\n",mbx::pool.size());
-    mbx::dump(32);
-
-    auto n=TXQ.size();
-    Serial.printf("DUMP ALL %d TXQ MBXs\n",n);
-    for(auto i=0;i<n;i++){
-        auto tmp=std::move(TXQ.front());
-        tmp._dump(tmp.len);
-        TXQ.pop();
-        TXQ.push(std::move(tmp));
-    }
-
-    Serial.printf("DUMP ALL %d FRAGMENTS\n",_fragments.size());
-    for(auto & p:_fragments) Serial.printf("MBX 0x%08x len=%d\n",(void*) p.data,p.len);
-    Serial.printf("\n");
-}
-#endif
-/*
-void AardvarkTCP::rxstring(VARK_FN_RXSTRING f){ 
-    _rxfn=[=](const uint8_t* data, size_t len){
-        std::string x((const char*) data,len);
-        ::free((void*) data);
-        f(x);
-    }; 
-}
-*/
 void AardvarkTCP::TCPconnect() {
     if(!connected()){
         if(!_URL) return _cbError(VARK_NO_SERVER_DETAILS,0);
@@ -245,8 +211,10 @@ void AardvarkTCP::TCPurl(const char* url,const uint8_t* fingerprint){
     VARK_PRINT4("secure=%d\n",_URL->secure);
     if(_URL->secure){
     #if ASYNC_TCP_SSL_ENABLED
-        if(fingerprint) memcpy(_fingerprint, fingerprint, SHA1_SIZE);
-        else _cbError(VARK_TLS_NO_FINGERPRINT,0);
+        #if VARK_CHECK_FINGERPRINT
+            if(fingerprint) memcpy(_fingerprint, fingerprint, SHA1_SIZE);
+            else _cbError(VARK_TLS_NO_FINGERPRINT,0);
+        #endif
     #else
         _cbError(VARK_TLS_NO_SSL,0);
     #endif
@@ -254,12 +222,34 @@ void AardvarkTCP::TCPurl(const char* url,const uint8_t* fingerprint){
 }
 
 void AardvarkTCP::txdata(const uint8_t* d,size_t len,bool copy){
-    VARK_PRINT4("TXQ D/L Q=%d 0x%08x len=%d copy=%d\n",TXQ.size(),d,len,copy);
-    txdata(mbx((ADFP) d,len,copy));
+    VARK_PRINT4("_TXQ D/L Q=%d 0x%08x len=%d copy=%d\n",_TXQ.size(),d,len,copy);
+    txdata(mbx((uint8_t*) d,len,copy));
 }
 
 void AardvarkTCP::txdata(mbx m){
-    VARK_PRINT4("TXQ MBX len=%d 0x%08x %d\n",TXQ.size(),m.data,m.len);
-    TXQ.push(m);
-    if(TXQ.size()==1) _release(m);
+    VARK_PRINT4("_TXQ MBX len=%d 0x%08x %d\n",_TXQ.size(),m.data,m.len);
+    _TXQ.push(m);
+    if(_TXQ.size()==1) _release(m);
 }
+//
+//  PUBLIC
+//
+#if VARK_DEBUG
+void AardvarkTCP::dump(){ 
+    Serial.printf("DUMP ALL %d POOL BLOX (1st 32 only)\n",mbx::pool.size());
+    mbx::dump(32);
+
+    auto n=_TXQ.size();
+    Serial.printf("DUMP ALL %d _TXQ MBXs\n",n);
+    for(auto i=0;i<n;i++){
+        auto tmp=std::move(_TXQ.front());
+        tmp._dump(tmp.len);
+        _TXQ.pop();
+        _TXQ.push(std::move(tmp));
+    }
+
+    Serial.printf("DUMP ALL %d FRAGMENTS\n",_fragments.size());
+    for(auto & p:_fragments) Serial.printf("MBX 0x%08x len=%d\n",(void*) p.data,p.len);
+    Serial.printf("\n");
+}
+#endif

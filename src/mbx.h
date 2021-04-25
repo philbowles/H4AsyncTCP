@@ -26,26 +26,26 @@ SOFTWARE.
 #include<AardvarkTCP.h>
 #include<unordered_set>
 
-using VARK_MEM_POOL         = std::unordered_set<ADFP>;
+using VARK_MEM_POOL         = std::unordered_set<uint8_t*>;
 
 class mbx {
-                void            _create(ADFP p);
+                void            _create(uint8_t* p);
     public:
         static  VARK_MEM_POOL   pool;
 
                 bool            managed=false;
                 size_t          len=0;
-                ADFP            data=nullptr;
-                ADFP            frag=nullptr;
+                uint8_t*            data=nullptr;
+                uint8_t*            frag=nullptr;
         //  "normal" constructors
         mbx(){}
-        mbx(ADFP p,size_t s,bool copy=true): frag(nullptr),len(s),managed(copy){ _create(p); }
-        mbx(ADFP p,ADFP f,size_t s,bool copy=true): frag(f),len(s),managed(copy){ _create(p); }
+        mbx(uint8_t* p,size_t s,bool copy=true): frag(nullptr),len(s),managed(copy){ _create(p); }
+        mbx(uint8_t* p,uint8_t* f,size_t s,bool copy=true): frag(f),len(s),managed(copy){ _create(p); }
         // 
         virtual ~mbx(){} // absolutely do not never nohow free the data pointer here! It must stay alive till it is ACKed
         virtual void            ack();
                 void            clear();
-        static  void            clear(ADFP);
+        static  void            clear(uint8_t*);
         static  void            emptyPool();
         static  uint8_t*        getMemory(size_t size);
 #if VARK_DEBUG 

@@ -36,11 +36,9 @@ SOFTWARE.
 #include<pmbtools.h>
 
 #ifdef ARDUINO_ARCH_ESP32
-//    #pragma message("ESP32: using AsyncTCP")
     #include<WiFi.h>
     #include<AsyncTCP.h> /// no tls yet
 #else
-//    #pragma message("ESP8266: using ESPAsyncTCP")
     #include<async_config.h> // for the ssl
     #include<ESP8266WiFi.h>
     #include <ESPAsyncTCP.h>
@@ -96,9 +94,6 @@ err_enum_t {
   ERR_ARG = -16
 }
 */
-using VARK_DELAYED_FREE = uint8_t*;
-using ADFP              = VARK_DELAYED_FREE; // SOOO much less typing - ARMA "delayed free" pointer
-
 #include<mbx.h>
 
 using VARK_FN_RXDATA    = std::function<void(const uint8_t*,size_t)>;
@@ -130,43 +125,47 @@ class AardvarkTCP: public AsyncClient {
         bool          secure;
         URL(){};
     };
-            VARK_MSG_Q          TXQ;
-            VARK_cbConnect      _cbConnect=nullptr;
-            VARK_cbDisconnect   _cbDisconnect=nullptr;
-            VARK_cbError        _cbError=[](int e,int i){};
-            VARK_cbPoll         _cbPoll=nullptr;
-            VARK_FRAGMENTS      _fragments;
-     static size_t              _maxpl;
+        static  VARK_MSG_Q          _TXQ; // to enable debug dump from higehr powers...
+                VARK_cbConnect      _cbConnect=nullptr;
+                VARK_cbDisconnect   _cbDisconnect=nullptr;
+                VARK_cbError        _cbError=[](int e,int i){};
+                VARK_cbPoll         _cbPoll=nullptr;
+        static  VARK_FRAGMENTS      _fragments;
+        static  size_t              _maxpl;
 
-            size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
-            void                _busted(size_t len);
-            void                _clearFragments();
-            void                _ackTCP(size_t len,uint32_t time);
-            void                _onData(uint8_t* data, size_t len);
-            void                _onDisconnect(int8_t r);
-            void                _release(mbx m);
-     inline void                _runTXQ();
+                size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
+                void                _busted(size_t len);
+                void                _clearFragments();
+                void                _ackTCP(size_t len,uint32_t time);
+                void                _onData(uint8_t* data, size_t len);
+                void                _onDisconnect(int8_t r);
+                void                _release(mbx m);
+        inline  void                _runTXQ();
 
-            VARK_FN_RXDATA      _rxfn=[](const uint8_t* data, size_t len){};
+                VARK_FN_RXDATA      _rxfn=[](const uint8_t* data, size_t len){};
     protected:
-            URL*                _URL;
-            void                _parseURL(const std::string& url);
+                URL*                _URL;
+                void                _causeError(int e,int i){ _cbError(e,i); }
+                void                _parseURL(const std::string& url);
+        //
+        static  size_t inline       getMaxPayloadSize(){ return _maxpl; }
+                void                onTCPconnect(VARK_cbConnect callback){ _cbConnect=callback; }
+                void                onTCPdisconnect(VARK_cbDisconnect callback){ _cbDisconnect=callback; }
+                void                onTCPerror(VARK_cbError callback){ _cbError=callback; }
+                void                onTCPpoll(VARK_cbPoll callback){ _cbPoll=callback; }
+                void                rx(VARK_FN_RXDATA f){ _rxfn=f; }
+                void                TCPconnect();
+                void                TCPdisconnect(bool force = false);
+                void                TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
+                void                txdata(mbx m);
+                void                txdata(const uint8_t* d,size_t len,bool copy=true);
+
     public:
         AardvarkTCP();
 
-            void                dump(); // null if no debug
-//
-    static  size_t inline       getMaxPayloadSize(){ return _maxpl; }
-            void                onTCPconnect(VARK_cbConnect callback){ _cbConnect=callback; }
-            void                onTCPdisconnect(VARK_cbDisconnect callback){ _cbDisconnect=callback; }
-            void                onTCPerror(VARK_cbError callback){ _cbError=callback; }
-            void                onTCPpoll(VARK_cbPoll callback){ _cbPoll=callback; }
-            void                rx(VARK_FN_RXDATA f){ _rxfn=f; }
-            void                TCPconnect();
-            void                TCPdisconnect(bool force = false);
-            void                TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
-            void                txdata(mbx m);
-            void                txdata(const uint8_t* d,size_t len,bool copy=true);
+#if VARK_DEBUG
+        static  void                dump(); // null if no debug
+#endif
 //
 //              DO NOT CALL ANY FUNCTION STARTING WITH UNDERSCORE!!! _
 //
