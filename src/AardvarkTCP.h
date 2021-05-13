@@ -81,7 +81,7 @@ enum VARK_FAILURE : uint8_t {
     VARK_TLS_NO_FINGERPRINT,
     VARK_TLS_NO_SSL,
     VARK_TLS_UNWANTED_FINGERPRINT,
-    VARK_NO_SERVER_DETAILS,
+//    VARK_NO_SERVER_DETAILS,
     VARK_INPUT_TOO_BIG,
     VARK_MAX_ERROR
 };
@@ -115,16 +115,17 @@ class AardvarkTCP: public AsyncClient {
 #if ASYNC_TCP_SSL_ENABLED
             uint8_t             _fingerprint[SHA1_SIZE];
 #endif
-    struct  URL {
-        std::string   scheme;
-        std::string   host;
-        int           port;
-        std::string   path;
-        std::string   query;
-        std::string   fragment;
-        bool          secure;
-        URL(){};
-    };
+        struct  URL {
+            std::string   scheme;
+            std::string   host;
+            int           port;
+            std::string   path;
+            std::string   query;
+            std::string   fragment;
+            bool          secure;
+    //         URL(){};
+        };
+
         static  VARK_MSG_Q          _TXQ; // to enable debug dump from higehr powers...
                 VARK_cbConnect      _cbConnect=nullptr;
                 VARK_cbDisconnect   _cbDisconnect=nullptr;
@@ -133,7 +134,7 @@ class AardvarkTCP: public AsyncClient {
         static  VARK_FRAGMENTS      _fragments;
         static  size_t              _maxpl;
 
-                size_t              _ackSize(size_t len){ return  _URL->secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
+                size_t              _ackSize(size_t len){ return  _URL.secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
                 void                _busted(size_t len);
                 void                _clearFragments();
                 void                _ackTCP(size_t len,uint32_t time);
@@ -144,7 +145,7 @@ class AardvarkTCP: public AsyncClient {
 
                 VARK_FN_RXDATA      _rxfn=[](const uint8_t* data, size_t len){};
     protected:
-                URL*                _URL;
+                URL                 _URL;
                 void                _causeError(int e,int i){ _cbError(e,i); }
                 void                _parseURL(const std::string& url);
         //

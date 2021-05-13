@@ -46,9 +46,11 @@ void AardvarkErrors(int e,int info){
     case VARK_TLS_UNWANTED_FINGERPRINT:
         Serial.printf("WARNING: FINGERPRINT provided, insecure http:// given\n");
         break;
+/*
     case VARK_NO_SERVER_DETAILS: //  
         Serial.printf("ERROR:NO_SERVER_DETAILS info=%02x\n",info);
         break;
+*/
     case VARK_INPUT_TOO_BIG: //  
         Serial.printf("ERROR: RX msg(%d) that would 'break the bank'\n",info);
         break;

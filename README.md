@@ -2,7 +2,7 @@
 
 # ArduinoIDE Asynchronous TCP client library for ESP8266, ESP32
 
-## Version 0.1.0
+## Version 0.1.1
 
 ---
 
@@ -166,6 +166,8 @@ Note also that the version of TLS that ships with ESPAsyncTCP is very weak and t
 
 * ESP32 version cannot resolve `.local` addresses so you will need to specify the IP address
 * TLS very limited: only sites with very low requirements will allow connection
+* Some sites that send chunked-encoding responses also send dditonal packets - this confuses the rebuiulding mechanism. 
+  A better way needs to be found and will be fixed in a future release
 
 ---
 
@@ -177,7 +179,7 @@ In that role it allowed for huge payloads (up to 1/2 the available Free Heap) to
 
 No other library known to the author for ESP8266 / ESP32 can do this for MQTT and it does it seamlessly over TLS for HTTPS(ESP8266 only) or unencrypted HTTP (ESP8266 and ESP32). From the user's point-of-view you just "send a large packet" or "receive a large packet" - *which is the way it should be!*
 
-It is not much of a leap to realise tha the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or Thingspeaj etc, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) - which you could visualise as the diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
+It is not much of a leap to realise that the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or Thingspeak etc, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) - which you could visualise as the diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
 
 ![mbm](assets/origin.jpg)
 
