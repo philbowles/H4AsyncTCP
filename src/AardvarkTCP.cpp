@@ -143,7 +143,6 @@ void  AardvarkTCP::_parseURL(const std::string& url){
         VARK_PRINT4("scheme %s\n", _URL.scheme.data());
 
         std::vector<std::string> vs2=split(vs[1],"?");
-//        _URL.query=vs2.size()>1 ? urlencode(vs2[1]):"";
         _URL.query=vs2.size()>1 ? vs2[1]:"";
         VARK_PRINT4("query %s\n", _URL.query.data());
 
