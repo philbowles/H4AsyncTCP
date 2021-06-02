@@ -147,7 +147,7 @@ void  AardvarkTCP::_parseURL(const std::string& url){
         VARK_PRINT4("query %s\n", _URL.query.data());
 
         std::vector<std::string> vs3=split(vs2[0],"/");
-        _URL.path=string("/")+((vs3.size()>1) ? join(std::vector<std::string>(++vs3.begin(),vs3.end()),"/")+"/":"");
+        _URL.path=std::string("/")+((vs3.size()>1) ? join(std::vector<std::string>(++vs3.begin(),vs3.end()),"/")+"/":"");
         VARK_PRINT4("path %s\n", _URL.path.data());
 
         std::vector<std::string> vs4=split(vs3[0],":");
