@@ -2,7 +2,7 @@
 
 # ArduinoIDE Asynchronous TCP client library for ESP8266, ESP32
 
-## Version 0.1.2 Release Notes v0.4.1 2/6/2021
+## Version 0.1.2 2/6/2021
 
 Code tidying re std:: prefixing / namespace issues, API/functionality unchanged
 
