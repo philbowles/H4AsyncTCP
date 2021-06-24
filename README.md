@@ -10,6 +10,10 @@ Code tidying re std:: prefixing / namespace issues, API/functionality unchanged
 
 ---
 
+## If you are able, please [Support me on Patreon](https://patreon.com/esparto) and/or subscribe to my [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g)
+
+---
+
 # Contents
 
 * [What does it do?](#what-does-it-do)
@@ -18,7 +22,8 @@ Code tidying re std:: prefixing / namespace issues, API/functionality unchanged
 * [API](#api)
 * [Known Issues](#known-issues)
 * [History / Origins](#history--origin)
-* [Problems / Support](#issues--support)
+* [Installation](#installation)
+* [Issues](#issues)
 
 # What does it do?
 
@@ -85,6 +90,8 @@ Unless you need very special handling, most practical use cases boil down to:
 # The "menagerie" roadmap
 
 AardvarkTCP is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
+
+SEE [Installation](#installation)
 
 ![roadmap](assets/common/menagerieroadmap.jpg)
 
@@ -189,31 +196,28 @@ It is not much of a leap to realise that the same functionality is ideal for asy
 
 ---
 
-# Issues / Support
+# Installation
 
-Your **first** point of contact should be one of the facebook groups below, if only to let me know you have raised an issue here. Obviously I will check the issues from time to time, but I do no have the time to check every day.
+Please see [H4 Installer](https://github.com/philbowles/h4installer)
+# Issues
 
-If you want a rapid response, I am daily moderating those FB groups so you are likely to get a rapid response.
+## If you want a *quick* resolution, please follow these rules:
 
-## Before submitting an issue
+1. As with all H4 and H4Plugins libraries, please make sure you have read *all* the relevant documentation relating to the issue and watched any videos on the [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g). Please also subscribe to the channel for notifications of news and updates.
 
-If you do not provide sufficient information for me to be able to replicate the problem, ***I CANNOT FIX IT***
+2. If you still think there is a problem, then join the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and report the issue briefly there. This is because I visit the group every day, whereas I do not have time to visit 11 github repos every day. Furthermore, it alerts other users to potential problems and allows an initial assessment. 
 
-So, always provide: the MCU/board type, a good description of the problem, how / when / why it happens and how to recreate it, as well as the full source code, relevant Serial output messages and a DECODED stack trace in the event of a crash.
+3. If there is a genuine issue then you will be referred to [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) after which you are advised to create a full github issue report.
 
-## And finally...
-
-This is open-source, I do it in my own time, for free. If you want professional-level support because you are using *my* work to benefit your own commercial gain, then I'm happy to talk privately about a paid support contract. Or you can support me on [Patreon](https://www.patreon.com/esparto) 
+4. Failing to make an initial report in the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and simply starting with a github issue, or failing to include all of the information required in [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) is likely to result in a ***long*** delay before it gets picked up.
 
 ---
 
-## Find me daily in these FB groups
+(c) 2021 Phil Bowles h4plugins@gmail.com
 
-* [ESP8266 & ESP32 Microcontrollers](https://www.facebook.com/groups/2125820374390340/)
-* [ESP Developers](https://www.facebook.com/groups/ESP8266/)
-* [H4/Plugins support](https://www.facebook.com/groups/h4plugins)
-
-I am always grateful for any $upport on [Patreon](https://www.patreon.com/esparto) :)
-
-
-(C) 2021 Phil Bowles
+* [Support me on Patreon](https://patreon.com/esparto)
+* [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g)
+* [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/)
+* [Facebook General ESP8266 / ESP32](https://www.facebook.com/groups/2125820374390340/)
+* [Facebook ESP8266 Programming Questions](https://www.facebook.com/groups/esp8266questions/)
+* [Facebook ESP Developers (moderator)](https://www.facebook.com/groups/ESP8266/)
