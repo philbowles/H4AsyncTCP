@@ -25,13 +25,14 @@ SOFTWARE.
 #define AARDVARK_VERSION "0.1.2"
 /*
     Debug levels: 
-    0 - No debug messages
-    1 - TX / RX messages
+    0 - No debug messages, no debug functions
+    1 - Debug functions compiled in
+    2 - TX / RX / ACK messages
 
-    4 - everything
+    4 - a lot
 */
 
-#define VARK_DEBUG 0
+#define VARK_DEBUG 1
 
 #define VARK_CHECK_FINGERPRINT 0
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches

@@ -1,18 +1,18 @@
 #include<AardvarkTCP.h>
 #include<Ticker.h>
 
-//#define URL "http://robot.local:80/index.html"
+#define URL "http://blackbox.local:80/index.html"
 //#define URL "http://192.168.1.21:80/index.html"
-#define URL "https://robot.local:443/index.html"
+//#define URL "https://robot.local:443/index.html"
 
 class myprotocol: public AardvarkTCP{
     public:
         myprotocol(): AardvarkTCP(){
-          onTCPconnect([]{ Serial.printf("User: Connected to %s max payload %d\n",URL,getMaxPayloadSize()); });          
+          onTCPconnect([]{ Serial.printf("User: Connected to %s\n",URL); });
           onTCPdisconnect([](int8_t reason){ Serial.printf("User: Disconnected from %s (reason %d)\n",URL,reason); });
        }
 
-       void connect(const string& url,const uint8_t* fingerprint=nullptr){
+       void connect(const std::string& url,const uint8_t* fingerprint=nullptr){
           TCPurl(URL,fingerprint);
           TCPconnect();       
        }

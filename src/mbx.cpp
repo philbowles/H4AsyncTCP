@@ -30,7 +30,9 @@ VARK_MEM_POOL       mbx::pool;
 void mbx::_create(uint8_t* p){
     if(managed){
         data=getMemory(len);
-        memcpy(data,p,len);
+        if(data){
+            memcpy(data,p,len);
+        } else VARK_PRINT4("MBX 0x%08x len=%d MALLOC FAIL\n",(void*) data,len);
     } else data=p;
 }
 //
@@ -64,12 +66,12 @@ void mbx::emptyPool(){
 }
 
 uint8_t* mbx::getMemory(size_t size){
-    if(size > _HAL_maxPayloadSize()) return nullptr;
+    if(size > AardvarkTCP::maxPacket()) return nullptr;
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
         pool.insert(mm);
         VARK_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-    } //else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u FM=%u\n",ESP.getFreeHeap(),ESP.getMaxFreeBlockSize(),ESP.getHeapFragmentation());
+    } else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u\n",_HAL_freeHeap,_HAL_maxHeapBlock());
     return mm;
 }
 

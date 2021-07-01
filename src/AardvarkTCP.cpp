@@ -24,13 +24,18 @@ SOFTWARE.
 */
 #include <AardvarkTCP.h>
 
-size_t          AardvarkTCP::_maxpl;
 VARK_FRAGMENTS  AardvarkTCP::_fragments;
 VARK_MSG_Q      AardvarkTCP::_TXQ;
+PMB_HEAP_LIMITS AardvarkTCP::safeHeapLimits;
 
-AardvarkTCP::AardvarkTCP(): AsyncClient(){
-    setNoDelay(true);
-    onConnect([this](void* obj, AsyncClient* c) { 
+void AardvarkTCP::_acCommon(AsyncClient* acp){
+    VARK_PRINT1("acCommon 0x%08x ac=0x%08x\n",this,acp);
+    safeHeapLimits=heapLimits();
+    _ac=acp;
+    _ac->setNoDelay(true);
+    _ac->setAckTimeout(0);
+    _ac->setRxTimeout(true);
+    _ac->onConnect([this](void* obj, AsyncClient* c) { 
     #if ASYNC_TCP_SSL_ENABLED
         #if VARK_CHECK_FINGERPRINT
             if(_URL.secure) {
@@ -42,15 +47,14 @@ AardvarkTCP::AardvarkTCP(): AsyncClient(){
             }
         #endif
     #endif
-        _maxpl=(_HAL_maxHeapBlock() / 2 ) - VARK_HEAP_SAFETY;
-        VARK_PRINT1("Connected Max packet size %d TCP_MSS=%d SND_BUF=%d TCP_WND=%d\n",getMaxPayloadSize(),TCP_MSS,TCP_SND_BUF,TCP_WND);
+        VARK_PRINT1("Connected TCP_MSS=%d SND_BUF=%d TCP_WND=%d\n",TCP_MSS,TCP_SND_BUF,TCP_WND);
         if( _cbConnect)  _cbConnect();
     });
-    onDisconnect([this](void* obj, AsyncClient* c) { VARK_PRINT1("TCP onDisconnect\n"); _onDisconnect(VARK_TCP_DISCONNECTED); });
-    onError([=](void* obj, AsyncClient* c,int error) { VARK_PRINT1("TCP onError %d\n",error); _cbError(VARK_TCP_UNHANDLED,error); });
-    onAck([=](void* obj, AsyncClient* c,size_t len, uint32_t time){ _ackTCP(len,time); }); 
-    onData([=](void* obj, AsyncClient* c, void* data, size_t len) { _onData(static_cast<uint8_t*>(data), len); });
-    onPoll([=](void* obj, AsyncClient* c) { if(_cbPoll) _cbPoll(); });
+    _ac->onDisconnect([this](void* obj, AsyncClient* c) { VARK_PRINT1("TCP onDisconnect\n"); _onDisconnect(VARK_TCP_DISCONNECTED); });
+    _ac->onError([=](void* obj, AsyncClient* c,int error) { VARK_PRINT1("TCP onError %d\n",error); _cbError(VARK_TCP_UNHANDLED,error); });
+    _ac->onAck([=](void* obj, AsyncClient* c,size_t len, uint32_t time){ _ackTCP(len,time); }); 
+    _ac->onData([=](void* obj, AsyncClient* c, void* data, size_t len) { _onData(static_cast<uint8_t*>(data), len); });
+    _ac->onPoll([=](void* obj, AsyncClient* c) { if(_cbPoll) _cbPoll(); });
 } 
 
 void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
@@ -58,12 +62,19 @@ void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
     size_t amtToAck=len;
     while(amtToAck){
         if(!_TXQ.empty()){
-            mbx tmp=std::move(_TXQ.front());
+            mbx tmp=_TXQ.front();
             _TXQ.pop();
             VARK_PRINT4("amt2ack=%d _secure=%d sub=%d leaving %d\n",amtToAck,_URL.secure,_ackSize(tmp.len),amtToAck-_ackSize(tmp.len));
             amtToAck-=_ackSize(tmp.len);
             tmp.ack();
+            VARK_PRINT1("<---- AK %d bytes Q=%d H=%u MB=%u LOK=%d\n",tmp.len,_TXQ.size(),_HAL_freeHeap(),_HAL_maxHeapBlock(),_heapLock);
+            //
         } else break;
+    }
+    auto h=_HAL_maxHeapBlock();
+    if(_heapLock && h > safeHeapLimits.second){
+        _heapLock=false;
+        _causeError(VARK_HEAP_LIMITER_OFF,_TXQ.size());
     }
     _runTXQ();
 }
@@ -82,9 +93,9 @@ void AardvarkTCP::_clearFragments() {
 
 void AardvarkTCP::_onData(uint8_t* data, size_t len) {
     static uint32_t stored=0;
-    VARK_PRINT1("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,isRecvPush(),stored,_HAL_maxHeapBlock());
+    VARK_PRINT1("<---- RX %08X len=%d PSH=%d stored=%d FH=%u\n",data,len,_ac->isRecvPush(),stored,_HAL_maxHeapBlock());
     VARK_DUMP4(data,len);
-    if(isRecvPush() || _URL.secure){
+    if(_ac->isRecvPush() || _URL.secure){
         if(!stored && (len < TCP_MSS)) _rxfn(data,len);
         else {
             uint8_t* bpp=mbx::getMemory(stored+len);
@@ -131,14 +142,13 @@ void AardvarkTCP::_onDisconnect(int8_t r) {
     if(_cbDisconnect) _cbDisconnect(r);
 }
 
-
 void  AardvarkTCP::_parseURL(const std::string& url){
     if(url.find("http",0)) _parseURL(std::string("http://")+url);
     else {
         std::vector<std::string> vs=split(url,"//");
         _URL = {};
-        _URL.secure=url.find("https",0)!=std::string::npos;
-
+        _URL.secure=url.find("https",0)==std::string::npos ? false:true;
+        VARK_PRINT4("SECURE = %d  %s\n",_URL.secure,_URL.secure ? "TRUE":"FALSE");
         _URL.scheme=vs[0]+"//";
         VARK_PRINT4("scheme %s\n", _URL.scheme.data());
 
@@ -175,34 +185,47 @@ void AardvarkTCP::_release(mbx m){
         _TXQ.pop(); // hara kiri - queue is now n smaller copies of yourself!
         _runTXQ();
     } 
-    else {//if(canSend()){
-        VARK_PRINT1("----> TX %d bytes\n",m.len);
-        add((const char*) m.data,m.len);
-        send();
+    else {
+        if(_ac->canSend()){
+            VARK_PRINT2("----> TX %d bytes Q=%d H=%u\n",m.len,_TXQ.size(),_HAL_freeHeap());
+            _ac->add((const char*) m.data,m.len);
+            _ac->send();
+#if VARK_DEBUG
+            _sigmaTX++;
+#endif
+        } else VARK_PRINT1("CAN'T SEND!!! 0x%08x len=%d TCP_MSS=%d managed=%d\n",m.data,m.len,TCP_MSS,m.managed);
     }
+} 
+
+void  AardvarkTCP::_runTXQ(){ if(!_TXQ.empty()) _release(_TXQ.front()); }
+//
+//
+//
+void AardvarkTCP::safeHeap(size_t cutout,size_t cutin){
+    VARK_PRINT1("safeHeap: cutout=%u cutin=%u hysteresis=%d\n",cutout,cutin,cutin - cutout);
+    if(cutout < cutin){
+        safeHeapLimits.first=cutout;
+        safeHeapLimits.second=cutin;
+        VARK_PRINT1("HEAP SAFETY: cutout=%u cutin=%u hysteresis=%u\n",cutout,cutin,cutin - cutout);
+    } else Serial.printf("VARK_HEAP_LIMITER_ERROR %d\n",cutout - cutin);
 }
 
-void  AardvarkTCP::_runTXQ(){ if(!_TXQ.empty()) _release(std::move(_TXQ.front())); }
-//
-// protected
-//
 void AardvarkTCP::TCPconnect() {
-    if(!connected()){
-        //if(_URL!={}) return _cbError(VARK_NO_SERVER_DETAILS,0);
+    if(!_ac->connected()){
         VARK_PRINT1("CONNECTING to %s:%d secure=%d FH=%u\n",_URL.host.data(),_URL.port,_URL.secure,_HAL_maxHeapBlock());
         #if ASYNC_TCP_SSL_ENABLED
-            connect(_URL.host.data(), _URL.port, _URL.secure);
+            ac->connect(_URL.host.data(), _URL.port, _URL.secure);
         #else
             if(_URL.secure) _cbError(VARK_TLS_NO_SSL,0);
-            else connect(_URL.host.data(), _URL.port);
+            else _ac->connect(_URL.host.data(), _URL.port);
         #endif
     }
 }
 
 void AardvarkTCP::TCPdisconnect(bool force) {
     VARK_PRINT1("USER DCX\n");
-    close(force);
-    if(!connected()) _cbError(VARK_TCP_DISCONNECTED,0);
+    _ac->close(force);
+    if(!_ac->connected()) _cbError(VARK_TCP_DISCONNECTED,0);
 }
 
 void AardvarkTCP::TCPurl(const char* url,const uint8_t* fingerprint){
@@ -226,12 +249,23 @@ void AardvarkTCP::txdata(const uint8_t* d,size_t len,bool copy){
 }
 
 void AardvarkTCP::txdata(mbx m){
-    VARK_PRINT4("_TXQ MBX Q=%d 0x%08x %d\n",_TXQ.size(),m.data,m.len);
-    _TXQ.push(m);
-    if(_TXQ.size()==1) _release(m);
+    if(_heapLock){
+        _causeError(VARK_HEAP_LIMITER_LOST,m.len);
+        m.ack();
+    }
+    else {
+        auto h=_HAL_maxHeapBlock();
+        if(h > safeHeapLimits.first){
+            _TXQ.push(m);
+            if(_TXQ.size()==1) _release(m);
+        }
+        else {
+            _heapLock=true;
+            _causeError(VARK_HEAP_LIMITER_ON,h);
+            txdata(m); // recurse to get rid of failed m
+        }
+    }
 }
-//
-//  PUBLIC
 //
 #if VARK_DEBUG
 void AardvarkTCP::dump(){ 

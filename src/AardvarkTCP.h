@@ -75,65 +75,56 @@ extern void dumphex(const uint8_t*,size_t);
 #endif
 
 enum VARK_FAILURE : uint8_t {
-    VARK_TCP_DISCONNECTED,
-    VARK_TCP_UNHANDLED,
-    VARK_TLS_BAD_FINGERPRINT,
-    VARK_TLS_NO_FINGERPRINT,
-    VARK_TLS_NO_SSL,
-    VARK_TLS_UNWANTED_FINGERPRINT,
-//    VARK_NO_SERVER_DETAILS,
-    VARK_INPUT_TOO_BIG,
+    VARK_TCP_DISCONNECTED, // 0
+    VARK_TCP_UNHANDLED, // 1
+    VARK_TLS_BAD_FINGERPRINT, // 2
+    VARK_TLS_NO_FINGERPRINT, // 3
+    VARK_TLS_NO_SSL, // 4
+    VARK_TLS_UNWANTED_FINGERPRINT, // 5
+    VARK_INPUT_TOO_BIG, // 6
+    VARK_HEAP_LIMITER_ON, // 7
+    VARK_HEAP_LIMITER_OFF, // 8
+    VARK_HEAP_LIMITER_LOST, // 9
     VARK_MAX_ERROR
 };
-/* LwIP
-err_enum_t {
-  ERR_OK = 0, ERR_MEM = -1, ERR_BUF = -2, ERR_TIMEOUT = -3,
-  ERR_RTE = -4, ERR_INPROGRESS = -5, ERR_VAL = -6, ERR_WOULDBLOCK = -7,
-  ERR_USE = -8, ERR_ALREADY = -9, ERR_ISCONN = -10, ERR_CONN = -11,
-  ERR_IF = -12, ERR_ABRT = -13, ERR_RST = -14, ERR_CLSD = -15,
-  ERR_ARG = -16
-}
-*/
+
 #include<mbx.h>
 
-using VARK_FN_RXDATA    = std::function<void(const uint8_t*,size_t)>;
+using VARK_FN_RXDATA    =std::function<void(const uint8_t*,size_t)>;
 
 class mbx;
 
-using VARK_FRAGMENTS    = std::vector<mbx>;
-using VARK_MSG_Q        = std::queue<mbx>;
-
+using VARK_FRAGMENTS    =std::vector<mbx>;
+using VARK_MSG_Q        =std::queue<mbx>;
 using VARK_cbConnect    =std::function<void()>;
 using VARK_cbPoll       =std::function<void()>;
 using VARK_cbDisconnect =std::function<void(int8_t)>;
 using VARK_cbError      =std::function<void(int,int)>;
-
 using VARK_NVP_MAP      =std::map<std::string,std::string>;
 
-class AardvarkTCP: public AsyncClient {
+class AardvarkTCP {
         friend class mbx;
 #if ASYNC_TCP_SSL_ENABLED
             uint8_t             _fingerprint[SHA1_SIZE];
 #endif
-        struct  URL {
-            std::string   scheme;
-            std::string   host;
-            int           port;
-            std::string   path;
-            std::string   query;
-            std::string   fragment;
-            bool          secure;
-    //         URL(){};
-        };
+                struct  URL {
+                    std::string     scheme;
+                    std::string     host;
+                    int             port;
+                    std::string     path;
+                    std::string     query;
+                    std::string     fragment;
+                    bool            secure=0;
+                };
 
-        static  VARK_MSG_Q          _TXQ; // to enable debug dump from higehr powers...
                 VARK_cbConnect      _cbConnect=nullptr;
                 VARK_cbDisconnect   _cbDisconnect=nullptr;
                 VARK_cbError        _cbError=[](int e,int i){};
                 VARK_cbPoll         _cbPoll=nullptr;
         static  VARK_FRAGMENTS      _fragments;
-        static  size_t              _maxpl;
+                bool                _heapLock=false;
 
+                void                _acCommon(AsyncClient* ac);
                 size_t              _ackSize(size_t len){ return  _URL.secure ? 69+((len>>4)<<4):len; } // that was SOME hack! v. proud
                 void                _busted(size_t len);
                 void                _clearFragments();
@@ -144,30 +135,40 @@ class AardvarkTCP: public AsyncClient {
         inline  void                _runTXQ();
 
                 VARK_FN_RXDATA      _rxfn=[](const uint8_t* data, size_t len){};
-    protected:
+                AsyncClient*        _ac;
+public:
+#if VARK_DEBUG
+                size_t              _sigmaTX=0;
+#endif
+        static  PMB_HEAP_LIMITS     safeHeapLimits;
+        static  VARK_MSG_Q          _TXQ; // to enable debug dump from higehr powers...
                 URL                 _URL;
                 void                _causeError(int e,int i){ _cbError(e,i); }
                 void                _parseURL(const std::string& url);
         //
-        static  size_t inline       getMaxPayloadSize(){ return _maxpl; }
+                void                close(){ _ac->close(); }
+                bool                connected(){ return _ac->connected(); }
+                bool                isRecvPush(){ return _ac->isRecvPush(); }
+        static  size_t              maxPacket(){ return (_HAL_maxHeapBlock() - safeHeapLimits.first) / 2; }
                 void                onTCPconnect(VARK_cbConnect callback){ _cbConnect=callback; }
                 void                onTCPdisconnect(VARK_cbDisconnect callback){ _cbDisconnect=callback; }
                 void                onTCPerror(VARK_cbError callback){ _cbError=callback; }
                 void                onTCPpoll(VARK_cbPoll callback){ _cbPoll=callback; }
                 void                rx(VARK_FN_RXDATA f){ _rxfn=f; }
+        static  void                safeHeap(size_t cutout,size_t cutin);
+                void                setNoDelay(bool tf){ _ac->setNoDelay(tf); }
+                void                setRxTimeout(size_t t){ _ac->setRxTimeout(t); }
+                void                setAckTimeout(size_t t){ _ac->setAckTimeout(t); }
                 void                TCPconnect();
                 void                TCPdisconnect(bool force = false);
                 void                TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
                 void                txdata(mbx m);
                 void                txdata(const uint8_t* d,size_t len,bool copy=true);
 
-    public:
-        AardvarkTCP();
+        AardvarkTCP(){ _acCommon(new AsyncClient()); } // use yer own
+        AardvarkTCP(AsyncClient* acp){ _acCommon(acp); } // transform (nick) someone else's
 
 #if VARK_DEBUG
         static  void                dump(); // null if no debug
 #endif
-//
-//              DO NOT CALL ANY FUNCTION STARTING WITH UNDERSCORE!!! _
-//
 };
