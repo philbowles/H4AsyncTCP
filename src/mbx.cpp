@@ -30,9 +30,8 @@ VARK_MEM_POOL       mbx::pool;
 void mbx::_create(uint8_t* p){
     if(managed){
         data=getMemory(len);
-        if(data){
-            memcpy(data,p,len);
-        } else VARK_PRINT4("MBX 0x%08x len=%d MALLOC FAIL\n",(void*) data,len);
+        if(data) memcpy(data,p,len);
+        else VARK_PRINT4("MBX 0x%08x len=%d MALLOC FAIL\n",(void*) data,len);
     } else data=p;
 }
 //
@@ -71,8 +70,10 @@ uint8_t* mbx::getMemory(size_t size){
     if(mm){
         pool.insert(mm);
         VARK_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-    } else VARK_PRINT1("********** MBX STATUS: FH=%u MXBLK=%u\n",_HAL_freeHeap,_HAL_maxHeapBlock());
-    return mm;
+        return mm;
+    }
+    VARK_PRINT1("********** MBX FAIL STATUS: FH=%u MXBLK=%u\n",_HAL_freeHeap(),_HAL_maxHeapBlock());
+    return nullptr;
 }
 
 #if VARK_DEBUG

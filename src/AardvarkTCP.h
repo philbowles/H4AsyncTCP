@@ -145,6 +145,7 @@ public:
                 URL                 _URL;
                 void                _causeError(int e,int i){ _cbError(e,i); }
                 void                _parseURL(const std::string& url);
+                void                _releaseLock();
         //
                 void                close(){ _ac->close(); }
                 bool                connected(){ return _ac->connected(); }

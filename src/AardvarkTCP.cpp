@@ -51,10 +51,11 @@ void AardvarkTCP::_acCommon(AsyncClient* acp){
         if( _cbConnect)  _cbConnect();
     });
     _ac->onDisconnect([this](void* obj, AsyncClient* c) { VARK_PRINT1("TCP onDisconnect\n"); _onDisconnect(VARK_TCP_DISCONNECTED); });
-    _ac->onError([=](void* obj, AsyncClient* c,int error) { VARK_PRINT1("TCP onError %d\n",error); _cbError(VARK_TCP_UNHANDLED,error); });
+    _ac->onError([=](void* obj, AsyncClient* c,int error) { VARK_PRINT1("TCP onError %d\n",error); if(_cbError) _cbError(VARK_TCP_UNHANDLED,error); });
     _ac->onAck([=](void* obj, AsyncClient* c,size_t len, uint32_t time){ _ackTCP(len,time); }); 
     _ac->onData([=](void* obj, AsyncClient* c, void* data, size_t len) { _onData(static_cast<uint8_t*>(data), len); });
-    _ac->onPoll([=](void* obj, AsyncClient* c) { if(_cbPoll) _cbPoll(); });
+    _ac->onPoll([=](void* obj, AsyncClient* c) { _releaseLock(); if(_cbPoll) _cbPoll(); });
+    _ac->onTimeout([=](void* obj, AsyncClient* c,uint32_t time){ VARK_PRINT1("TCP onTimeout %d\n",time); }); 
 } 
 
 void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
@@ -68,14 +69,9 @@ void AardvarkTCP::_ackTCP(size_t len, uint32_t time){
             amtToAck-=_ackSize(tmp.len);
             tmp.ack();
             VARK_PRINT1("<---- AK %d bytes Q=%d H=%u MB=%u LOK=%d\n",tmp.len,_TXQ.size(),_HAL_freeHeap(),_HAL_maxHeapBlock(),_heapLock);
-            //
         } else break;
     }
-    auto h=_HAL_maxHeapBlock();
-    if(_heapLock && h > safeHeapLimits.second){
-        _heapLock=false;
-        _causeError(VARK_HEAP_LIMITER_OFF,_TXQ.size());
-    }
+    _releaseLock();
     _runTXQ();
 }
 
@@ -195,11 +191,17 @@ void AardvarkTCP::_release(mbx m){
 #endif
         } else VARK_PRINT1("CAN'T SEND!!! 0x%08x len=%d TCP_MSS=%d managed=%d\n",m.data,m.len,TCP_MSS,m.managed);
     }
-} 
+}
+
+void AardvarkTCP::_releaseLock(){
+    auto h=_HAL_freeHeap();
+    if(_heapLock && h > safeHeapLimits.second){
+        _heapLock=false;
+        _causeError(VARK_HEAP_LIMITER_OFF,_TXQ.size());
+    }
+}
 
 void  AardvarkTCP::_runTXQ(){ if(!_TXQ.empty()) _release(_TXQ.front()); }
-//
-//
 //
 void AardvarkTCP::safeHeap(size_t cutout,size_t cutin){
     VARK_PRINT1("safeHeap: cutout=%u cutin=%u hysteresis=%d\n",cutout,cutin,cutin - cutout);
@@ -254,7 +256,7 @@ void AardvarkTCP::txdata(mbx m){
         m.ack();
     }
     else {
-        auto h=_HAL_maxHeapBlock();
+        auto h=_HAL_freeHeap();
         if(h > safeHeapLimits.first){
             _TXQ.push(m);
             if(_TXQ.size()==1) _release(m);
