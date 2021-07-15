@@ -2,16 +2,16 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-AardvarkTCP	KEYWORD1
+H4AsyncTCP	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
 #######################################
 
-VARK_PRINT1	KEYWORD2
-VARK_PRINT2	KEYWORD2
-VARK_PRINT3	KEYWORD2
-VARK_PRINT4	KEYWORD2
+H4AT_PRINT1	KEYWORD2
+H4AT_PRINT2	KEYWORD2
+H4AT_PRINT3	KEYWORD2
+H4AT_PRINT4	KEYWORD2
 
 onTCPconnect	KEYWORD2
 onTCPdisconnect	KEYWORD2

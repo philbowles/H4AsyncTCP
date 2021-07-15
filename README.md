@@ -1,24 +1,16 @@
-![vark](assets/aardvark.png)
+![vark](assets/H4Async.png)
 
 # ArduinoIDE Asynchronous TCP client library for ESP8266, ESP32
 
-## Version 0.1.2 2/6/2021
+## Version 0.0.1 12/07/2021
 
-Code tidying re std:: prefixing / namespace issues, API/functionality unchanged
-
-## Version 0.1.1
-
----
-
-## If you are able, please [Support me on Patreon](https://patreon.com/esparto) and/or subscribe to my [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g)
-
----
+IT MAY NOT EVEN HAPP, OK?
 
 # Contents
 
 * [What does it do?](#what-does-it-do)
 * [Worth 1000 words - the minimal API](#worth-1000-words)
-* [Where AardvarkTCP fits in "The Menagerie"](#the-menagerie-roadmap)
+* [Where H4AsyncTCP fits in "The Menagerie"](#the-menagerie-roadmap)
 * [API](#api)
 * [Known Issues](#known-issues)
 * [History / Origins](#history--origin)
@@ -48,7 +40,7 @@ It also fixes at least two fatal bugs in ESPAsyncTCP (for ESP8266) which cause s
 
 LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation-dependent and *could* change in the future, so "hardcoding" any of them into your own app would be a **bad idea** as it could cause problems in the future or prevent you code running on newer / different machines.
 
-AardvarkTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, irrespective of those LwIP "magic numbers". As an example, here it is running "underneath" [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) on an ESP8266 and allowing that lib to send and receive a 22kb+(!) MQTT packet
+H4AsyncTCP solves that problem by allowing data up to 1/2 of the free heap to be sent / received, irrespective of those LwIP "magic numbers". As an example, here it is running "underneath" [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) on an ESP8266 and allowing that lib to send and receive a 22kb+(!) MQTT packet
 
 ![twentytwo](assets/twentytwo.jpg)
 
@@ -59,20 +51,20 @@ On ESP32 this can grow to over 50kb
 ---
 ## Worth 1000 words:
 
-Other than the ESPAsyncTCP/AsynTCP API which is exposed for compatibility should you need it (you won't!), the main AardvarkTCP API is:
+Other than the ESPAsyncTCP/AsynTCP API which is exposed for compatibility should you need it (you won't!), the main H4AsyncTCP API is:
 
 ```cpp
 // callbacks
-void    onTCPconnect(VARK_cbConnect callback);
-void    onTCPdisconnect(VARK_cbDisconnect callback);
-void    onTCPerror(VARK_cbError callback);
-void    onTCPpoll(VARK_cbPoll callback);
+void    onTCPconnect(H4AT_cbConnect callback);
+void    onTCPdisconnect(H4AT_cbDisconnect callback);
+void    onTCPerror(H4AT_cbError callback);
+void    onTCPpoll(H4AT_cbPoll callback);
 // setup / connect / disconnect
 void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
 void    TCPconnect();
 void    TCPdisconnect(bool force = false);
 // send / receive
-void    rx(VARK_FN_RXDATA f);
+void    rx(H4AT_FN_RXDATA f);
 void    txdata(const uint8_t* d,size_t len,bool copy=true);
 ```
 
@@ -86,7 +78,7 @@ Unless you need very special handling, most practical use cases boil down to:
 
 # The "menagerie" roadmap
 
-AardvarkTCP is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
+H4AsyncTCP is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
 
 SEE [Installation](#installation)
 
@@ -100,7 +92,7 @@ SEE [Installation](#installation)
 ||[Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master)|"Glue" to LwIP(ESP32)| Missing features added |
 ||[Forked ESPAsyncWebserver](https://github.com/philbowles/ESPAsyncWebServer)| Basis of webUI in H4Plugins| Several major bugfixes |
 |![roadmap](assets/common/tools_icon.jpg)|[PMB Tools](https://github.com/philbowles/pmbtools)|'32/'8266 HAL and utility functions| |
-|![roadmap](assets/common/aardvark_icon.jpg)|[AardvarkTCP](https://github.com/philbowles/AardvarkTCP)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
+|![roadmap](assets/common/H4Async_icon.jpg)|[H4AsyncTCP](https://github.com/philbowles/H4AsyncTCP)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
 |![roadmap](assets/common/pangolin_icon.jpg)|[PangolinMQTT](https://github.com/philbowles/PangolinMQTT)|Async MQTT Client|QoS 0/1/2 Fully 3.1.1 compliant. Large payloads |
 |![roadmap](assets/common/armadillo_icon.jpg)|[ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)|Async HTTP/S Client| Simple send/callback of large payloads |
 |![roadmap](assets/common/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers| |
@@ -110,18 +102,18 @@ SEE [Installation](#installation)
 
 # API
 
-Since AardvarkTCP must be inherited from, all of the following methods are `protected`
+Since H4AsyncTCP must be inherited from, all of the following methods are `protected`
 
-The only public methods are the default constructor and the `dump` function (if VARK_DEBUG is set in vark_config.h)
+The only public methods are the default constructor and the `dump` function (if H4AT_DEBUG is set in H4AT_config.h)
 
 ```cpp
 void    _causeError(int e,int i); // allows subclasses to use single base class error handler
 void    _parseURL(const std::string& url);// insiders shortcut
-void    onTCPconnect(VARK_cbConnect callback); // <void(void)>
-void    onTCPdisconnect(VARK_cbDisconnect callback); // <void(int8_t)> -ve values arise in TCP, +ve values generated by AardvarkTCP
-void    onTCPerror(VARK_cbError callback); // <void(int e,int info)> see above. Info gives more details 
-void    onTCPpoll(VARK_cbPoll callback); // <void(void)>
-void    rx(VARK_FN_RXDATA f); // all received data comes here: <void(const uint8_t*,size_t)>;
+void    onTCPconnect(H4AT_cbConnect callback); // <void(void)>
+void    onTCPdisconnect(H4AT_cbDisconnect callback); // <void(int8_t)> -ve values arise in TCP, +ve values generated by H4AsyncTCP
+void    onTCPerror(H4AT_cbError callback); // <void(int e,int info)> see above. Info gives more details 
+void    onTCPpoll(H4AT_cbPoll callback); // <void(void)>
+void    rx(H4AT_FN_RXDATA f); // all received data comes here: <void(const uint8_t*,size_t)>;
 void    TCPconnect(); // does what it says on the tin...
 void    TCPdisconnect(bool force = false); // ...as does this
 void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr); // see below
@@ -180,7 +172,7 @@ Note also that the version of TLS that ships with ESPAsyncTCP is very weak and t
 
 # History / Origin
 
-AardvarkTCP is in essence the blue portion of the following diagram, chopped out of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) so as a "core concept" it has been working well for quite a while.
+H4AsyncTCP is in essence the blue portion of the following diagram, chopped out of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) so as a "core concept" it has been working well for quite a while.
 
 In that role it allowed for huge payloads (up to 1/2 the available Free Heap) to be sent and received over MQTT. It fragments the outgoing packets into message blocks small enough to fit whatever LwIP buffers your implementation has configured (without you having to worry or even know what they are) and acts a flow-control manager to synchronise the real-time to-ing, fro-ing and ACK-ing of Asynchronous TCP in the background. It does the reverse for huge incoming messages, which can only arrive - by definition - one LwIP buffer-full at a time. It then reassembles all the fragments into one huge packet and passes it to the MQTT protocol analyser.
 

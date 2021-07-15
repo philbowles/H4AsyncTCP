@@ -1,7 +1,0 @@
-SOONEST:
-    urlencoding of path parts
-SOON:
-    @username:password for basic auth in dillo
-MEDIUM-TERM:
-    full big boys TLS in ESP32
-DREAMLAND:
