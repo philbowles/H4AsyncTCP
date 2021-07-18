@@ -2,7 +2,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-H4AsyncTCP	KEYWORD1
+H4AsyncClient	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)

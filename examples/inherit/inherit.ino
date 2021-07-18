@@ -1,13 +1,13 @@
-#include<H4AsyncTCP.h>
+#include<H4AsyncClient.h>
 #include<Ticker.h>
 
 #define URL "http://blackbox.local:80/index.html"
 //#define URL "http://192.168.1.21:80/index.html"
 //#define URL "https://robot.local:443/index.html"
 
-class myprotocol: public H4AsyncTCP{
+class myprotocol: public H4AsyncClient{
     public:
-        myprotocol(): H4AsyncTCP(){
+        myprotocol(): H4AsyncClient(){
           onTCPconnect([]{ Serial.printf("User: Connected to %s\n",URL); });
           onTCPdisconnect([](int8_t reason){ Serial.printf("User: Disconnected from %s (reason %d)\n",URL,reason); });
        }

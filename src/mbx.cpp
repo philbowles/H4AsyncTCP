@@ -50,7 +50,7 @@ void mbx::ack(){
 
 void mbx::clear(uint8_t* p){
     if(pool.count(p)) {
-        H4AT_PRINT4("MBX DEL BLOCK 0x%08x\n",p);
+        H4AT_PRINT2("MBX DEL BLOCK 0x%08x\n",p);
         free(p);
         pool.erase(p);
     }
@@ -59,7 +59,7 @@ void mbx::clear(uint8_t* p){
 void mbx::clear(){ clear(data); }
 
 void mbx::emptyPool(){
-    H4AT_PRINT4("MBX EMPTY POOL len=%d FH=%u\n",pool.size(),_HAL_maxHeapBlock());
+    H4AT_PRINT2("MBX EMPTY POOL len=%d FH=%u MXBLK=%u\n",pool.size(),_HAL_freeHeap(),_HAL_maxHeapBlock());
     for(auto const& p:pool) clear(p);
     pool.clear();
 }

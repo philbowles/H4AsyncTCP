@@ -31,8 +31,7 @@ SOFTWARE.
 
     4 - a lot
 */
-
-#define H4AT_DEBUG 0
+#define H4AT_DEBUG 1
 
 #define H4AT_CHECK_FINGERPRINT 0
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches

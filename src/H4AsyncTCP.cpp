@@ -34,9 +34,9 @@ extern "C"{
   #include "lwip/init.h"
 }
 
-PMB_HEAP_LIMITS H4AsyncTCP::safeHeapLimits;
+PMB_HEAP_LIMITS H4AsyncClient::safeHeapLimits;
 
-H4_INT_MAP H4AsyncTCP::_errorNames={
+H4_INT_MAP H4AsyncClient::_errorNames={
 #if H4AT_DEBUG
     {ERR_OK,"No error, everything OK"},
     {ERR_MEM,"Out of memory error"},
@@ -66,10 +66,17 @@ H4_INT_MAP H4AsyncTCP::_errorNames={
     {H4AT_INPUT_TOO_BIG,"Input too big"},
 #endif
 };
- 
-void H4AsyncTCP::_ackTCP(uint16_t len){
-    H4AT_PRINT2("ACK! INP %u Q=%d\n",len,_TXQ.size());
-    if(_TXQ.size()){
+H4AsyncClient::H4AsyncClient(tcp_pcb* p){
+    _pcb=p;
+    H4AT_PRINT3("H4AsyncClient CTOR 0x%08x 0x%08x\n",this,_pcb);
+    safeHeapLimits=heapLimits();
+};
+
+H4AsyncClient::~H4AsyncClient(){
+    H4AT_PRINT3("H4AsyncClient DTOR 0x%08x\n",this);
+}
+
+void H4AsyncClient::_ackTCP(uint16_t len){
         size_t amtToAck=_ackSize(len);
         while(amtToAck){
             _HAL_feedWatchdog(); // for massive acks
@@ -86,17 +93,15 @@ void H4AsyncTCP::_ackTCP(uint16_t len){
             }
         } 
         _releaseHeapLock();
-    } else H4AT_PRINT4("TXQ empty!\n");
-    H4AT_PRINT2("ACK! OUT %u Q=%d\n",len,_TXQ.size());
 }
 
-void H4AsyncTCP::_busted(size_t len) {
+void H4AsyncClient::_busted(size_t len) {
     _clearFragments();
     mbx::emptyPool();
     _cbError(H4AT_INPUT_TOO_BIG,len);
 }
 
-void H4AsyncTCP::_chopQ(H4AT_MSG_Q& q) {
+void H4AsyncClient::_chopQ(H4AT_MSG_Q& q) {
     while(!q.empty()){
         mbx tmp=q.front();
         q.pop();
@@ -104,18 +109,18 @@ void H4AsyncTCP::_chopQ(H4AT_MSG_Q& q) {
     }
 }
 
-void H4AsyncTCP::_clearFragments() {
+void H4AsyncClient::_clearFragments() {
     for(auto &f:_fragments) f.clear();
     _fragments.clear();
     _fragments.shrink_to_fit();
 }
 
-void H4AsyncTCP::_connGuard(H4_FN_VOID f) {
+void H4AsyncClient::_connGuard(H4_FN_VOID f) {
     if(_pcb) f();
     else DISPATCH(this,Error,ERR_CONN,0);
 }
 
-void H4AsyncTCP::_cnxGuard(H4_FN_VOID f) {
+void H4AsyncClient::_cnxGuard(H4_FN_VOID f) {
     H4AT_PRINT4("_cnxGuard p=0x%08x\n",_pcb);
     if(_pcb){
         H4AT_PRINT4("_cnxGuard state=%d\n",_pcb->state);
@@ -129,23 +134,30 @@ void H4AsyncTCP::_cnxGuard(H4_FN_VOID f) {
     else f();
 }
 
-void H4AsyncTCP::_connect() {
-    if(_pcb=tcp_new()){
-        H4AT_PRINT1("_connect p=0x%08x\n",_pcb);
-        tcp_setprio(_pcb, TCP_PRIO_MIN);
-        tcp_arg(_pcb, this);
-        tcp_err(_pcb, &_tcp_error);
-        size_t err = tcp_connect(_pcb, &_URL.addr, _URL.port,(tcp_connected_fn)&_tcp_connected);
-        if(err) DISPATCH(this,Error,err,0);
-    } else DISPATCH(this,Error,ERR_MEM,_HAL_freeHeap());
+void H4AsyncClient::_connect() {
+    if(!_pcb) _pcb=tcp_new();
+    H4AT_PRINT2("_connect p=0x%08x\n",_pcb);
+    tcp_setprio(_pcb, TCP_PRIO_MIN);
+    tcp_arg(_pcb, this);
+    tcp_err(_pcb, &_tcp_error);
+    size_t err = tcp_connect(_pcb, &_URL.addr, _URL.port,(tcp_connected_fn)&_tcp_connected);
+    if(err) DISPATCH(this,Error,err,0);
 }
 
-void H4AsyncTCP::_onData(struct pbuf *pb) {
+void H4AsyncClient::_onData(struct tcp_pcb *tpcb,struct pbuf *pb) {
+    if(!pb){
+        Serial.printf("DODGY PBUF!==========================================\n");
+        return;
+    }
     uint8_t* data=reinterpret_cast<uint8_t*>(pb->payload);
     size_t len=pb->len;
-    H4AT_PRINT3("<---- RX %08X len=%d _stored=%d FH=%u flags=0x%02x\n",data,len,_stored,_HAL_maxHeapBlock(),pb->flags);
+    H4AT_PRINT3("<---- RX[0x%08X] pb=0x%08x d=0x%08X len=%d _stored=%d FH=%u flags=0x%02x\n",this,tpcb,data,len,_stored,_HAL_maxHeapBlock(),pb->flags);
+//    H4AT_DUMP4(data,len);
     if(pb->flags & PBUF_FLAG_PUSH){
-        if(!_stored) _rxfn(data,len);
+        if(!_stored) {
+            if(_rxfn) _rxfn(data,len);
+            else Serial.printf("WAAAAAAAAAAAAAt VVVVVVVVVVVVVVVVVVVVV FUX?\n");
+        }
         else {
             uint8_t* bpp=mbx::getMemory(_stored+len);
             if(bpp){
@@ -171,9 +183,11 @@ void H4AsyncTCP::_onData(struct pbuf *pb) {
         _stored+=len;
         H4AT_PRINT3("CR FRAG %08X len=%d _stored=%d\n",_fragments.back().data,_fragments.back().len,_stored);
     }
+    tcp_recved(tpcb, pb->len);
+    pbuf_free(pb); // watch this!!
 }
 
-void  H4AsyncTCP::_parseURL(const std::string& url){
+void  H4AsyncClient::_parseURL(const std::string& url){
     if(url.find("http",0)) _parseURL(std::string("http://")+url);
     else {
         std::vector<std::string> vs=split(url,"//");
@@ -200,79 +214,81 @@ void  H4AsyncTCP::_parseURL(const std::string& url){
     }
 }
 
-void H4AsyncTCP::_releaseHeapLock(){
+void H4AsyncClient::_releaseHeapLock(){
     auto h=_HAL_freeHeap();
     if(_heapLock && h > safeHeapLimits.second){
         _heapLock=false;
-        _causeError(H4AT_HEAP_LIMITER_OFF,_TXQ.size());
+        DISPATCH(this,Error,H4AT_HEAP_LIMITER_OFF,_TXQ.size());
     }
-    _runPXQ();
+    _runPXQ(); // really?
 }
 
-void H4AsyncTCP::_runPXQ(){
+void H4AsyncClient::_runPXQ(){
     if(_PXQ.size() && (!_pxqRunning)){
         _pxqRunning=h4.repeatWhile(
             [&]{ return _PXQ.size(); },1, // this is baffling! 
-            [&]{ _TX(); },
+            [=]{ _TX(); },
             [&]{
-                H4AT_PRINT4("PXQ ENDS\n");
+                H4AT_PRINT4("PXQ DRAINED\n");
                 _pxqRunning=nullptr;
             }
         );
     }
 }
 
-void H4AsyncTCP::_tcp_error(void * arg, err_t err) { DISPATCH(arg,Error,err,0); }
+void H4AsyncClient::_tcp_error(void * arg, err_t err) { DISPATCH(arg,Error,err,0); }
 
-err_t H4AsyncTCP::_tcp_connected(void* arg, void* tpcb, err_t err){
+err_t H4AsyncClient::_tcp_connected(void* arg, void* tpcb, err_t err){
 #if H4AT_DEBUG
-    auto p=reinterpret_cast<H4AsyncTCP*>(arg);
-    H4AT_PRINT4("_tcp_connected  a=0x%08x p=0x%08x e=%d IP=%s:%d\n",arg,tpcb,err,p->getRemoteAddressString().data(),p->getRemotePort());
+    auto p=reinterpret_cast<tcp_pcb*>(tpcb);
+    IPAddress ip(ip_addr_get_ip4_u32(&p->local_ip));
+    H4AT_PRINT3("_tcp_connected  a=0x%08x p=0x%08x e=%d IP=%s:%d\n",arg,tpcb,err,ip.toString().c_str(),p->local_port);
 #endif
-    tcp_poll(reinterpret_cast<tcp_pcb*>(tpcb), &_tcp_poll,1); // units of 500mS
-    tcp_sent(reinterpret_cast<tcp_pcb*>(tpcb), &_tcp_sent); // units of 500mS
-    tcp_recv(reinterpret_cast<tcp_pcb*>(tpcb), &_tcp_recv); // units of 500mS
+    tcp_poll(p, &_tcp_poll,1); // units of 500mS
+    tcp_sent(p, &_tcp_sent);
+    tcp_recv(p, &_tcp_recv); 
     DISPATCH_V(arg,Connect);
     return ERR_OK;
 }
 
-void H4AsyncTCP::_tcp_dns_found(const char * name, struct ip_addr * ipaddr, void * arg) {
-    H4AT_PRINT4("_tcp_dns_found %s i=0x%08x p=0x%08x\n",name,ipaddr,arg);
+void H4AsyncClient::_tcp_dns_found(const char * name, struct ip_addr * ipaddr, void * arg) {
+    H4AT_PRINT3("_tcp_dns_found %s i=0x%08x p=0x%08x\n",name,ipaddr,arg);
     if(ipaddr){
-        auto p=reinterpret_cast<H4AsyncTCP*>(arg);
+        auto p=reinterpret_cast<H4AsyncClient*>(arg);
         ip_addr_copy(p->_URL.addr, *ipaddr);
         h4.queueFunction([=]{ p->_connect(); });
     } else DISPATCH(arg,Error,H4AT_ERR_DNS_NF,0);
 }
 
-err_t H4AsyncTCP::_tcp_poll(void *arg, struct tcp_pcb *tpcb){
-    DISPATCH_V(arg,Poll);
-    return ERR_OK;
+err_t H4AsyncClient::_tcp_poll(void *arg, struct tcp_pcb *tpcb){
+    auto p=reinterpret_cast<H4AsyncClient*>(arg);
+    if(p->_cbPoll) return p->_cbPoll();
+    else return ERR_OK;
 }
 
-err_t H4AsyncTCP::_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *pb, err_t err){
-    H4AT_PRINT4("_tcp_recv a=0x%08x p=0x%08x b=0x%08x err=%d\n",arg,tpcb,pb,err);
+err_t H4AsyncClient::_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *pb, err_t err){
+    auto p=reinterpret_cast<H4AsyncClient*>(arg);
     if(pb){
-        auto p=reinterpret_cast<H4AsyncTCP*>(arg);
-        H4AT_PRINT4("PB 0x%08x  nxt=0x%08x  load=0x%08x tot=%d len=%d flags=0x%02x ref=%d\n",pb,pb->next,pb->payload,pb->tot_len,pb->len,pb->flags,pb->ref);
-        h4.queueFunction([=]{ 
-            p->_onData(pb);
-            tcp_recved(tpcb, pb->len);
-            pbuf_free(pb);
-        });
-    } //else Serial.printf("REMIND ME WHAT TF THIS MEANS????? (remote has closed)\n");
+        H4AT_PRINT3("_tcp_recv a=0x%08x p=0x%08x b=0x%08x err=%d\n",p,tpcb,pb,err);
+        h4.queueFunction([=]{ p->_onData(tpcb,pb); }); // change to dispatch?
+        return ERR_OK;
+    } 
+    else {
+        H4AT_PRINT3("remote has closed connexion\n");
+        p->_closeConnection=true;
+        return _tcp_poll(arg,tpcb);
+    }
+}
+
+err_t H4AsyncClient::_tcp_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len){
+    H4AT_PRINT2("_tcp_sent a=0x%08x p=0x%08x len=%d\n",arg,tpcb,len);
+    auto p=reinterpret_cast<H4AsyncClient*>(arg);
+    h4.queueFunction([=]{ p->_ackTCP(len); }); // change to onACK + dispatch
     return ERR_OK;
 }
 
-err_t H4AsyncTCP::_tcp_sent(void *arg, struct tcp_pcb *tpcb, uint16_t len){
-//    H4AT_PRINT4("_tcp_sent a=0x%08x p=0x%08x len=%d\n",arg,tpcb,len);
-    auto p=reinterpret_cast<H4AsyncTCP*>(arg);
-    h4.queueFunction([=]{ p->_ackTCP(len); });
-    return ERR_OK;
-}
-
-void H4AsyncTCP::_TX(){
-    H4AT_PRINT2("TX 0x%08x len=%d TCP_SND_BUF=%d managed=%d\n",_PXQ.front().data,_PXQ.front().len,tcp_sndbuf(_pcb),_PXQ.front().managed);
+void H4AsyncClient::_TX(){
+    H4AT_PRINT3("TX 0x%08x len=%d TCP_SND_BUF=%d managed=%d\n",_PXQ.front().data,_PXQ.front().len,tcp_sndbuf(_pcb),_PXQ.front().managed);
     if(_PXQ.front().len>TCP_SND_BUF) {
         mbx m=_PXQ.front();
         _PXQ.pop();
@@ -282,7 +298,7 @@ void H4AsyncTCP::_TX(){
             size_t toSend=std::min(TCP_SND_BUF,bytesLeft);
             uint8_t* F=(--nFrags) ? (uint8_t*) nFrags:m.data;
             _PXQ.emplace(m.data+(m.len - bytesLeft),F,toSend,false);
-            H4AT_PRINT2("CHUNK 0x%08x frag=0x%08x len=%d\n",m.data+(m.len - bytesLeft),F,toSend);
+            H4AT_PRINT3("CHUNK 0x%08x frag=0x%08x len=%d\n",m.data+(m.len - bytesLeft),F,toSend);
             bytesLeft-=toSend;
         } while(bytesLeft); /// set PSH flag on last fragment
     }
@@ -290,7 +306,7 @@ void H4AsyncTCP::_TX(){
         if(_PXQ.front().len > tcp_sndbuf(_pcb)) while(!tcp_sndbuf(_pcb)) { yield(); }
         else {
             mbx m=_PXQ.front();
-            H4AT_PRINT2("----> TX data=0x%08x len=%d TXQ=%d PXQ=%d H=%u\n",m.data,m.len,_TXQ.size(),_PXQ.size(),_HAL_freeHeap());
+            H4AT_PRINT3("----> TX data=0x%08x len=%d TXQ=%d PXQ=%d H=%u\n",m.data,m.len,_TXQ.size(),_PXQ.size(),_HAL_freeHeap());
             uint8_t flags;
             if(m.managed) flags=TCP_WRITE_FLAG_COPY;
             if((uint32_t) m.frag > 5000 ) flags |= TCP_WRITE_FLAG_MORE; // sex this up: e.g. calculate maxium possible N packtes
@@ -300,49 +316,39 @@ void H4AsyncTCP::_TX(){
                 if(!err){
                     _PXQ.pop();
                     _TXQ.push(m);
-                } else DISPATCH(this,Error,22,22);
-            } else DISPATCH(this,Error,33,33);
+                } else DISPATCH(this,Error,err,22);
+            } else DISPATCH(this,Error,err,33);
         }
     }
 }
 //
 //
 //
-void H4AsyncTCP::close(bool abort){
-    H4AT_PRINT4("close abort=%d\n",abort);
+void H4AsyncClient::close(){
+    H4AT_PRINT4("close\n");
     _connGuard([=]{
-//        h4.queueFunction([=]{
-            err_t err;
-            if(abort) tcp_abort(_pcb);
-            else err = tcp_close(_pcb);
-            _pcb=nullptr;
-            if(err) DISPATCH(this,Error,err,abort);
-            else {
-                H4AT_PRINT4("DELETE ALL %d _PXQ MBXs\n",_PXQ.size());
-                h4.cancel(_pxqRunning);
-                _chopQ(_PXQ);
-
-                H4AT_PRINT1("LET TXQ DRAIN %d\n",_TXQ.size());
-                h4.repeatWhile(
-                    [&]{ return _TXQ.size(); },10, // this is baffling! 
-                    []{}, // feed watchdog?
-                    [=]{
-                        H4AT_PRINT4("TXQ DRAINED KILL CLIENT\n");
-                        _clearFragments();
-                        H4AT_PRINT4("FRAGMENTS CLEARED FH=%u\n",_HAL_maxHeapBlock());
-                        mbx::emptyPool();
-                        H4AT_PRINT4("close final 2 dispatch user od abort=%d\n",abort);
-                        DISPATCH(this,Disconnect,abort);
-                        H4AT_PRINT4("close final 3 hara kiri=%d\n",abort);
-                        delete this; // HARA KIRI!
-                    }
+        H4AT_PRINT3("DELETE ALL %d _PXQ MBXs\n",_PXQ.size());
+        tcp_arg(_pcb, NULL);
+        h4.cancel(_pxqRunning);
+        _chopQ(_PXQ);
+        H4AT_PRINT3("LET TXQ DRAIN %d\n",_TXQ.size());
+        h4.repeatWhile(
+            [&]{ return _TXQ.size(); },10, // this is baffling! 
+            []{}, // feed watchdog?
+            [=]{
+                H4AT_PRINT3("TXQ DRAINED KILL CLIENT\n");
+                _clearFragments();
+                mbx::emptyPool();
+                h4.queueFunction(
+                    [=]{ if(_cbDisconnect) _cbDisconnect(0); },
+                    [=]{ delete this; }
                 );
             }
-//        });
+        );
     });
 }
 
-void H4AsyncTCP::connect(const char* host,uint16_t port){
+void H4AsyncClient::connect(const char* host,uint16_t port){
     _cnxGuard([=]{
         IPAddress ip;
 
@@ -351,7 +357,6 @@ void H4AsyncTCP::connect(const char* host,uint16_t port){
             _URL.port=port;
             err_t err = dns_gethostbyname(host, &_URL.addr, (dns_found_callback)&_tcp_dns_found, this);
             if(err == ERR_OK) {
-                H4AT_PRINT1("dns_gethostbyname err=%u\n",err);
                 DISPATCH(this,Error,H4AT_ERR_DNS_FAIL,0);
                 return;
             }
@@ -359,12 +364,12 @@ void H4AsyncTCP::connect(const char* host,uint16_t port){
     });
 }
 
-void H4AsyncTCP::connect(const char* url){
+void H4AsyncClient::connect(const char* url){
     _parseURL(url);
     connect(_URL.host.data(),_URL.port);
 }
 
-void H4AsyncTCP::connect(IPAddress ip,uint16_t port){
+void H4AsyncClient::connect(IPAddress ip,uint16_t port){
     _cnxGuard([=]{
         _URL.port=port;
         ip_addr_set_ip4_u32(&_URL.addr, ip);
@@ -372,11 +377,11 @@ void H4AsyncTCP::connect(IPAddress ip,uint16_t port){
     });
 }
 
-void H4AsyncTCP::connect(){ connect(_URL.host.data(),_URL.port); }
+void H4AsyncClient::connect(){ connect(_URL.host.data(),_URL.port); }
 
-bool H4AsyncTCP::connected(){ return _pcb && _pcb->state== 4; }
+bool H4AsyncClient::connected(){ return _pcb && _pcb->state== 4; }
 
-std::string H4AsyncTCP::errorstring(int8_t e){
+std::string H4AsyncClient::errorstring(int e){
     #ifdef H4AT_DEBUG
         if(_errorNames.count(e)) return _errorNames[e];
         else return stringFromInt(e); 
@@ -385,12 +390,19 @@ std::string H4AsyncTCP::errorstring(int8_t e){
     #endif
 }
 
-std::string H4AsyncTCP::getRemoteAddressString(){
-    IPAddress ip(getRemoteAddress());
-    return std::string(ip.toString().c_str());
+bool H4AsyncClient::free(){
+  if(!_pcb)
+    return true;
+  if(_pcb->state == 0 || _pcb->state > 4)
+    return true;
+  return false;
 }
 
-void H4AsyncTCP::safeHeap(size_t cutout,size_t cutin){
+std::string H4AsyncClient::remoteIPString(){
+    return std::string(remoteIP().toString().c_str());
+}
+
+void H4AsyncClient::safeHeap(size_t cutout,size_t cutin){
     H4AT_PRINT1("safeHeap: cutout=%u cutin=%u hysteresis=%d\n",cutout,cutin,cutin - cutout);
     if(cutout < cutin){
         safeHeapLimits.first=cutout;
@@ -399,20 +411,25 @@ void H4AsyncTCP::safeHeap(size_t cutout,size_t cutin){
     } else H4AT_PRINT1("H4AT_HEAP_LIMITER_ERROR %d\n",cutout - cutin);
 }
 
-void H4AsyncTCP::setNoDelay(bool tf){
+void H4AsyncClient::setNoDelay(bool tf){
     _connGuard([=]{
         if(tf) tcp_nagle_disable(_pcb);
         else tcp_nagle_enable(_pcb);
     });
 }
 
-void H4AsyncTCP::txdata(const uint8_t* d,size_t len,bool copy){ _connGuard([=]{ txdata(mbx((uint8_t*) d,len,copy)); }); }
+void H4AsyncClient::txdata(const uint8_t* d,size_t len,bool copy){ 
+    _connGuard([=]{ 
+        H4AT_PRINT3("H4AsyncClient::txdata 0x%08x l=%d\n",d,len);
+        txdata(mbx((uint8_t*) d,len,copy));
+    }); 
+}
 
-void H4AsyncTCP::txdata(mbx m){
+void H4AsyncClient::txdata(mbx m){
     _HAL_feedWatchdog(); // fpr BIG Q's
     if(_heapLock){ // careful....!
         H4AT_PRINT1("HEAPLOCKED DISCARD %u BYTES\n",m.len);
-        _causeError(H4AT_HEAP_LIMITER_LOST,m.len);
+        DISPATCH(this,Error,H4AT_HEAP_LIMITER_LOST,m.len);
         m.ack();
         return;
     }
@@ -425,13 +442,13 @@ void H4AsyncTCP::txdata(mbx m){
         else {
             H4AT_PRINT1("HEAPLOCK FH=%u\n",h);
             _heapLock=true;
-            _causeError(H4AT_HEAP_LIMITER_ON,h);
+            DISPATCH(this,Error,H4AT_HEAP_LIMITER_ON,h);
             txdata(m); // recurse to get rid of failed m
         }
     }
 }
 
-void H4AsyncTCP::TCPurl(const char* url,const uint8_t* fingerprint){
+void H4AsyncClient::TCPurl(const char* url,const uint8_t* fingerprint){
     _parseURL(url);
     H4AT_PRINT4("secure=%d\n",_URL.secure);
     /*
@@ -449,7 +466,7 @@ void H4AsyncTCP::TCPurl(const char* url,const uint8_t* fingerprint){
 }
 //
 #if H4AT_DEBUG
-void H4AsyncTCP::dumpQ(H4AT_MSG_Q& q) {
+void H4AsyncClient::dumpQ(H4AT_MSG_Q& q) {
     H4AT_MSG_Q cq=q;
     H4AT_PRINT2("dumpQ: size=%d\n",q.size());
     while(!cq.empty()){
@@ -459,7 +476,7 @@ void H4AsyncTCP::dumpQ(H4AT_MSG_Q& q) {
     }
 }
 
-void H4AsyncTCP::dump(){ 
+void H4AsyncClient::dump(){ 
     Serial.printf("DUMP ALL %d POOL BLOX (1st 32 only)\n",mbx::pool.size());
     mbx::dump(32);
 
@@ -475,6 +492,71 @@ void H4AsyncTCP::dump(){
     Serial.printf("\n");
 }
 #else
-void H4AsyncTCP::dumpQ(H4AT_MSG_Q& q) {}
-void H4AsyncTCP::dump(){}
+void H4AsyncClient::dumpQ(H4AT_MSG_Q& q) {}
+void H4AsyncClient::dump(){}
 #endif
+/*
+
+/*
+H4AsyncServer::H4AsyncServer(IPAddress addr, uint16_t port)
+: _port(port)
+, _addr(addr)
+, _noDelay(false)
+, _pcb(0)
+, _connect_cb(0)
+, _connect_cb_arg(0)
+{}
+*/
+H4AsyncServer::H4AsyncServer(uint16_t port): _port(port){ H4AT_PRINT1("SERVER=0x%08x\n",this); }
+
+H4AsyncServer::~H4AsyncServer(){
+    end();
+}
+
+void H4AsyncServer::begin(){
+    if(_pcb) return;
+
+    int8_t err;
+    _pcb = tcp_new();
+    if (!_pcb) return;
+
+    err = tcp_bind(_pcb, IP_ADDR_ANY, _port);
+    if (err != ERR_OK) {
+        tcp_close(_pcb);
+        return;
+    }
+
+    //static uint8_t backlog = 5; // #define this
+    _pcb = tcp_listen_with_backlog(_pcb, 3);
+    H4AT_PRINT1("SERVER tcp_listen_with_backlog moi=0x%08x p=0x%08x err=%d TDLB=%d TDLB=%d\n",this,_pcb,err,TCP_DEFAULT_LISTEN_BACKLOG,TCP_LISTEN_BACKLOG);
+    if (!_pcb) return;
+
+    tcp_setprio(_pcb, TCP_PRIO_MIN);
+    tcp_arg(_pcb, (void*) this);
+    tcp_accept(_pcb, &_s_accept);
+}
+
+void H4AsyncServer::end(){
+    if(_pcb){
+        tcp_arg(_pcb, NULL);
+        tcp_accept(_pcb, NULL);
+        if(tcp_close(_pcb) != ERR_OK) tcp_abort(_pcb);
+        _pcb = NULL;
+    }
+}
+
+void H4AsyncServer::setNoDelay(bool nodelay){ _noDelay = nodelay; }
+
+bool H4AsyncServer::getNoDelay(){ return _noDelay; }
+
+uint8_t H4AsyncServer::status(){
+    if (!_pcb) return 0;
+    return _pcb->state;
+}
+
+err_t H4AsyncServer::_s_accept(void * arg, tcp_pcb * tpcb, err_t err){
+    H4AT_PRINT4("_s_accept INCOMING!!! arg=0x%08x p=0x%08x\n",arg,tpcb);
+    auto p=reinterpret_cast<H4AsyncServer*>(arg);
+    p->_client_cb(tpcb);
+    return ERR_OK;
+}
