@@ -1,0 +1,3 @@
+scavenge stale cnx
+manifest for HTTP_GET
+re-order prams to be more like shitlibs

@@ -23,13 +23,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 #include "H4AsyncTCP.h"
-
-H4AT_MEM_POOL       mbx::pool;
+#include "raw.h"
 
 //
-void mbx::_create(uint8_t* p){
+void mbx::_create(H4L_request*  c,uint8_t* p){
+//    Serial.printf("mbx::_create 0x%08x p=0x%08x m=%d\n",c,p,managed);
+    _c=c;
     if(managed){
-        data=getMemory(len);
+        data=getMemory(c,len);
         if(data) memcpy(data,p,len);
         else H4AT_PRINT4("MBX 0x%08x len=%d MALLOC FAIL\n",(void*) data,len);
     } else data=p;
@@ -48,45 +49,21 @@ void mbx::ack(){
     clear();
 }
 
-void mbx::clear(uint8_t* p){
-    if(pool.count(p)) {
-        H4AT_PRINT2("MBX DEL BLOCK 0x%08x\n",p);
+void mbx::clear(H4L_request* c, uint8_t* p){
+    if(c->pool.count(p)) {
+        H4AT_PRINT4("FOR 0x%08x MBX DEL BLOCK 0x%08x\n",c,p);
         free(p);
-        pool.erase(p);
+        c->pool.erase(p);
     }
 }
 
-void mbx::clear(){ clear(data); }
+void mbx::clear(){ clear(_c,data); }
 
-void mbx::emptyPool(){
-    H4AT_PRINT2("MBX EMPTY POOL len=%d FH=%u MXBLK=%u\n",pool.size(),_HAL_freeHeap(),_HAL_maxHeapBlock());
-    for(auto const& p:pool) clear(p);
-    pool.clear();
-}
-
-uint8_t* mbx::getMemory(size_t size){
+uint8_t* mbx::getMemory(H4L_request* c,size_t size){
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
-        pool.insert(mm);
+        c->pool.insert(mm);
         H4AT_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-        return mm;
-    }
-    H4AT_PRINT1("********** MBX FAIL STATUS: FH=%u MXBLK=%u\n",_HAL_freeHeap(),_HAL_maxHeapBlock());
-    return nullptr;
+    } else H4AT_PRINT1("********** MBX FAIL STATUS: FH=%u MXBLK=%u ASKED:%u\n",_HAL_freeHeap(),_HAL_maxHeapBlock(),size);
+    return mm;
 }
-
-#if H4AT_DEBUG
-void mbx::_dump(size_t n){ 
-    Serial.printf("BLOCK 0x%08x len=%d frag=0x%08x mgd=%d\n",(void*) data,len,frag,managed);
-    dumphex(data,len < n ? len:n);
-}
-
-void mbx::dump(size_t n){ 
-    Serial.printf("\n%d Pool Blox\n",pool.size());
-    for(auto const& p:pool){
-        dumphex(p,n); // Danger, Will Robinson!!!
-        Serial.println();
-    }
-    Serial.println();
-}
-#endif
