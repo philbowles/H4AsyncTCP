@@ -73,6 +73,7 @@ class H4L_handler {
         }
 
         static  std::string mimeType(const std::string& fn);
+
     public:
         PMB_NVP_MAP     _sniffHeader;
         H4L_handler(const std::string& verb,const std::string& path,H4AS_RQ_HANDLER f=nullptr): _verb(verb),_path(path),_f(f){}
@@ -85,12 +86,11 @@ class H4L_handler {
             return _handle();
         };
 
-        void        addHeader(const std::string& name,const std::string& value){ _headers[name]=value; }
-
-        void        send(uint16_t code,const std::string& type,size_t length=0,const void* body=nullptr);
-        void        sendFile(const std::string& fn);
-        void        sendFileParams(const std::string& fn,PMB_NVP_MAP& params);
-        void        sendstring(const std::string& type,const std::string& data){ send(200,type,data.size(),(const void*) data.data()); }
+                void        addHeader(const std::string& name,const std::string& value){ _headers[name]=value; }
+        virtual void        send(uint16_t code,const std::string& type,size_t length=0,const void* body=nullptr);
+        virtual void        sendFile(const std::string& fn);
+        virtual void        sendFileParams(const std::string& fn,PMB_NVP_MAP& params);
+        virtual void        sendstring(const std::string& type,const std::string& data){ send(200,type,data.size(),(const void*) data.data()); }
 };
 
 class H4L_handlerFile: public H4L_handler {
@@ -118,10 +118,8 @@ class H4L_SSEClient{
     public:
         H4L_handlerSSE* _handler;
         H4L_request*    _client;
-        H4L_SSEClient(H4L_request* c,H4L_handlerSSE* h):_client(c),_handler(h){ H4AT_PRINT1("SSE CLIENT CTOR 0x%08x c=0x%08x h=0x%08x\n",this,c,h); }
-        ~H4L_SSEClient(){
-            H4AT_PRINT1("SSE CLIENT DTOR 0x%08x\n",this);
-        }
+        H4L_SSEClient(H4L_request* c,H4L_handlerSSE* h):_client(c),_handler(h){}
+        ~H4L_SSEClient(){}
 
     void send(const std::string& message, const std::string& event);
 };
@@ -130,14 +128,14 @@ using H4AS_EVT_HANDLER   = std::function<void(H4L_SSEClient*)>;
 
 #define H4AS_SSE_KA_ID 92
 #define H4AS_SCAVENGE_ID 93
-#define H4AS_SCAVENGE_FREQ 60000
+#define H4AS_SCAVENGE_FREQ 15000
 
 class H4L_handlerSSE: public H4L_handler {
         std::unordered_set<H4L_SSEClient*> _clients;
         H4AS_EVT_HANDLER    _cbConnect;
         uint32_t            _timeout;
-
-            void            onClient();
+    protected:
+        virtual bool _handle() override;
     public:
         uint32_t            _nextID=0;
 

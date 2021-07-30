@@ -163,7 +163,7 @@ static void _ocGuard(H4L_request *rq,H4_FN_VOID f){
 }
 
 static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
-    H4AT_PRINT1("RAW _raw_accept a=0x%08x p=0x%08x e=%d\n",arg,newpcb,err);
+//    H4AT_PRINT1("RAW _raw_accept a=0x%08x p=0x%08x e=%d\n",arg,newpcb,err);
     auto srv=reinterpret_cast<raw*>(arg);
     tcp_setprio(newpcb, TCP_PRIO_MIN);
     H4ATopenConnections.insert(new H4L_request(newpcb,srv));
@@ -172,10 +172,10 @@ static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
 }
 
 static void _raw_close(H4L_request *rq){
-    H4AT_PRINT1("RAW _raw_close IN RQ=0x%08x\n",rq);
+//    H4AT_PRINT1("RAW _raw_close IN RQ=0x%08x\n",rq);
     _ocGuard(rq,[=]{
         struct tcp_pcb *tpcb=rq->pcb;
-        H4AT_PRINT1("RAW _raw_close IN a=0x%08x t=0x%08x pool=%d PXQ=%d TXQ=%d\n",rq,tpcb,rq->pool.size(),rq->_PXQ.size(),rq->_TXQ.size());
+//        H4AT_PRINT1("RAW _raw_close IN a=0x%08x t=0x%08x pool=%d PXQ=%d TXQ=%d\n",rq,tpcb,rq->pool.size(),rq->_PXQ.size(),rq->_TXQ.size());
         tcp_arg(tpcb, NULL);
         tcp_sent(tpcb, NULL);
         tcp_recv(tpcb, NULL);
@@ -183,9 +183,9 @@ static void _raw_close(H4L_request *rq){
         tcp_close(tpcb);
         //
         H4ATopenConnections.erase(rq);
-        H4AT_PRINT2("RQ 0x%08x out of open list\n",rq);
+//        H4AT_PRINT2("RQ 0x%08x out of open list\n",rq);
         delete rq;
-        H4AT_PRINT2("OC 0x%08x SHE'S GONE!\n",rq);
+//        H4AT_PRINT2("OC 0x%08x SHE'S GONE!\n",rq);
     });
 }
 
@@ -199,7 +199,7 @@ static void _raw_error(void *arg, err_t err){
 }
 
 static err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
-    H4AT_PRINT1("CONNECTION 0x%08x raw_recv PCB=0x%08x PBUF=0x%08x e=%d\n",arg,tpcb,p,err);
+//    H4AT_PRINT1("CONNECTION 0x%08x raw_recv PCB=0x%08x PBUF=0x%08x e=%d\n",arg,tpcb,p,err);
     auto rq=reinterpret_cast<H4L_request*>(arg);
     _ocGuard(rq,[&]{
         if (p == NULL) {
@@ -215,7 +215,7 @@ static err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t er
 //                return err;
             }
             else {
-                H4AT_PRINT1("CONNECTION 0x%08x PCB=0x%08x b=0x%08x tot=%d len=%d flags=0x%02x e=%d\n",arg,tpcb,p,p->tot_len,p->len,p->flags,err);
+//                H4AT_PRINT1("CONNECTION 0x%08x PCB=0x%08x b=0x%08x tot=%d len=%d flags=0x%02x e=%d\n",arg,tpcb,p,p->tot_len,p->len,p->flags,err);
                 h4.queueFunction([=]{
                     rq->_lastSeen=millis();
                     rq->_onData(mbx(rq,(uint8_t*) p->payload,p->tot_len,true,p->flags));
@@ -230,7 +230,7 @@ static err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t er
 }
 
 static err_t _raw_sent(void *arg, struct tcp_pcb *tpcb, u16_t len){
-    H4AT_PRINT1("CONNECTION 0x%08x raw_sent PCB=0x%08x len=%d\n",arg,tpcb,len);
+//    H4AT_PRINT1("CONNECTION 0x%08x raw_sent PCB=0x%08x len=%d\n",arg,tpcb,len);
     auto rq = reinterpret_cast<H4L_request*>(arg);
     _ocGuard(rq,[=]{
         h4.queueFunction([=]{ 
@@ -242,7 +242,7 @@ static err_t _raw_sent(void *arg, struct tcp_pcb *tpcb, u16_t len){
 }
 
 void raw::begin(){
-    H4AT_PRINT1("BEGIN 0x%08x\n",this);
+//    H4AT_PRINT1("BEGIN 0x%08x\n",this);
     _handlers.push_back(new H4L_handlerFile());
     _handlers.push_back(new H4L_handler404());
 
@@ -275,7 +275,6 @@ void raw::startScavenger(){
             for(auto &oc:tbd) _raw_close(oc);
             H4AT_PRINT1("\n");
         },
-//        [=]{ H4AT_PRINT1("ALL CONNECTIONS CLOSED!\n"); h4.cancelSingleton(H4AS_SCAVENGE_ID); H4AT_PRINT1("Scavenging stopped\n"); },
         [=]{ H4AT_PRINT1("ALL CONNECTIONS CLOSED!\n"); h4.cancel(); H4AT_PRINT1("Scavenging stopped\n"); },
         H4AS_SCAVENGE_ID,
         true
@@ -283,7 +282,7 @@ void raw::startScavenger(){
 }
 
 H4L_request::H4L_request(struct tcp_pcb *newpcb,raw* srv): _server(srv),pcb(newpcb){
-    H4AT_PRINT1("NEW CONNECTION REQUEST 0x%08x PCB=0x%08x\n",this,newpcb);
+//    H4AT_PRINT1("NEW CONNECTION REQUEST 0x%08x PCB=0x%08x\n",this,newpcb);
     tcp_arg(newpcb, this);
     tcp_recv(newpcb, _raw_recv);
     tcp_err(newpcb, _raw_error);
@@ -292,14 +291,15 @@ H4L_request::H4L_request(struct tcp_pcb *newpcb,raw* srv): _server(srv),pcb(newp
 }
 
 H4L_request::~H4L_request(){
-    H4AT_PRINT1("END CONNECTION REQUEST 0x%08x pool=%d PXQ=%d TXQ=%d\n",this,pool.size(),_PXQ.size(),_TXQ.size());
+//    H4AT_PRINT1("END CONNECTION REQUEST 0x%08x pool=%d PXQ=%d TXQ=%d\n",this,pool.size(),_PXQ.size(),_TXQ.size());
     if(_cbDisconnect) _cbDisconnect(13); // sort out reason code
 }
 
 void H4L_request::_ackTCP(uint16_t len){
+
     H4AT_PRINT2("<---- AK! %u\n",len);
     //size_t amtToAck=_ackSize(len); fixup later
-    //
+    /*
     #if H4AT_DEBUG
     auto cq=_TXQ;
     while(!cq.empty()){
@@ -307,7 +307,7 @@ void H4L_request::_ackTCP(uint16_t len){
         cq.pop();
     }
     #endif
-    //
+    */
     size_t amtToAck=len; 
     while(amtToAck){
         _TXQ.front().len-=amtToAck;
@@ -324,6 +324,7 @@ void H4L_request::_ackTCP(uint16_t len){
         _HAL_feedWatchdog(); // for massive acks
     } 
 //    _releaseHeapLock();
+
 }
 
 void H4L_request::_busted(size_t len) {
@@ -409,7 +410,7 @@ void H4L_request::_TX(){
         else {
             mbx m=_PXQ.front();
             uint8_t flags=0;;
-            //flags=m.managed ? 0:TCP_WRITE_FLAG_COPY;
+            flags=TCP_WRITE_FLAG_COPY;
             if((uint32_t) m.frag > 5000 ) flags = TCP_WRITE_FLAG_MORE; // sex this up: e.g. calculate maxium possible N packtes
             H4AT_PRINT2("0x%08x ----> TX data=0x%08x len=%d TXQ=%d PXQ=%d flags=0x%02x frag=0x%08x\n",this,m.data,m.len,_TXQ.size(),_PXQ.size(),flags,m.frag);
             err_t err=tcp_write(pcb,m.data,m.len,flags);// arbitrary, sex it up - maxpaxket / sndbubuf
@@ -438,7 +439,7 @@ void H4L_request::process(uint8_t* data,size_t len){
     }
 //    for(auto &r:_rqHeaders) Serial.printf("RQ %s=%s\n",r.first.data(),r.second.data());
 
-    H4AT_PRINT1("CONNECTION 0x%08x PCB=0x%08x REQUEST %s %s checking %d _handlers\n",this,pcb,vparts[0].data(),vparts[1].data(),_server->_handlers.size());
+    //H4AT_PRINT1("CONNECTION 0x%08x PCB=0x%08x REQUEST %s %s checking %d _handlers\n",this,pcb,vparts[0].data(),vparts[1].data(),_server->_handlers.size());
     for(auto h:_server->_handlers){
         for(auto &s:h->_sniffHeader) if(_rqHeaders.count(uppercase(s.first))) h->_sniffHeader[s.first]=_rqHeaders[uppercase(s.first)];
         if(h->handled(this,vparts[0],vparts[1])) break;
@@ -543,32 +544,28 @@ bool H4L_handler404::_handle() { send(404,"text/plain",0,nullptr); return true; 
 //
 H4L_handlerSSE::H4L_handlerSSE(const std::string& url,uint32_t timeout):
     _timeout(timeout),
-    H4L_handler("GET",url,[=](H4L_handler* r){ onClient(); }){
-        H4AT_PRINT1("SSE HANDLER CTOR 0x%08x\n",this);
+    H4L_handler("GET",url) {
+//        H4AT_PRINT1("SSE HANDLER CTOR 0x%08x\n",this);
         _sniffHeader["last-event-id"]="";
 }
 
 H4L_handlerSSE::~H4L_handlerSSE(){
-    H4AT_PRINT1("SSE HANDLER DTOR 0x%08x\n",this);
+//    H4AT_PRINT1("SSE HANDLER DTOR 0x%08x\n",this);
     for(auto &c:_clients) c->_client->_lastSeen=0;
     h4.cancelSingleton(H4AS_SSE_KA_ID);
 }
 
-void H4L_handlerSSE::onClient(){
+bool H4L_handlerSSE::_handle(){
     H4AT_PRINT2("SSE HANDLER saving rqst 0x%08x TO=%d KA RATE=%d\n",_r,_timeout,(_timeout * 3) / 4);
-    for(auto &s:_sniffHeader) Serial.printf("IH %s=%s\n",s.first.data(),s.second.data());
-    //
+
     auto _c=new H4L_SSEClient(_r,this);
     _clients.insert(_c);
-    //Serial.printf("\n\n 0x%08x LEIs=%s[%d]\n\n",this,_sniffHeader["last-event-id"].data(),_c->lastID);
 
     _c->_client->onDisconnect([=](int x){
         _clients.erase(_c);
         H4AT_PRINT2("SSE CLIENT 0x%08x DCX - LEAVES %d clients\n",_c,_clients.size());
         if(!_clients.size()) h4.cancelSingleton(H4AS_SSE_KA_ID);
     });
-
-    _cbConnect(_c);
 
     addHeader("Cache-Control","no-cache");
     H4L_handler::send(200,"text/event-stream",0,nullptr); // explicitly send zero!
@@ -578,32 +575,25 @@ void H4L_handlerSSE::onClient(){
         std::string retry("retry: ");
         retry.append(stringFromInt(_timeout)).append("\n\n");
         _c->_client->txdata((const uint8_t *) retry.data(),retry.size());
+        _cbConnect(_c);
     });
 
     h4.every((_timeout * 1) / 2,[=]{ H4AT_PRINT2("H4L_handlerSSE 0x%08x send KA\n",this); send(":"); },nullptr,H4AS_SSE_KA_ID,true); // name it
+
     H4AT_PRINT2("SSE HANDLER OUT! 0x%08x\n",_r);
+    return true;
 }
 
 void H4L_handlerSSE::send(const std::string& message, const std::string& event){
-    Serial.printf("H4L_handlerSSE::send %s %s Nc=%d\n",message.data(),event.data(),_clients.size());
-    for(auto &c:_clients) {
-        Serial.printf("H4L_handlerSSE::send to 0x%08x\n",c);
-        c->send(message,event);
-    }
+    for(auto &c:_clients) c->send(message,event);
     _nextID++;
 }
 //
 // H4L_SSEClient
 //
 void H4L_SSEClient::send(const std::string& message,  const std::string& event){
-    Serial.printf("H4L_SSEClient::send m=%s e=%s rqst=0x%08x\n",message.data(),event.data(),_client);
     String m;
-    if(message[0]==':') {
-        m=":\n\n"; // keep alive
-        H4AT_PRINT2("T=%u SSE send KA via 0x%08x ah ah ah ah stayin' alive...\n",millis(),_client);
-    }
+    if(message[0]==':') m=":\n\n"; // keep alive
     else m=generateEventMessage(message.data(),event.data(),_handler->_nextID); // tidy that awful crap
-    Serial.printf("H4L_SSEClient::ONWIRE %s %s rqst=0x%08x\n",message.data(),event.data(),_client);
     _client->txdata((const uint8_t *) m.c_str(),m.length());
-    Serial.printf("H4L_SSEClient::OUT %s %s rqst=0x%08x\n",message.data(),event.data(),_client);
 }
