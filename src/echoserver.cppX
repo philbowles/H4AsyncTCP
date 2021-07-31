@@ -33,7 +33,7 @@
 
 /**
  * @file
- * TCP echo server example using raw API.
+ * TCP echo server example using H4AsyncWebServer API.
  *
  * Echos all bytes sent by connecting client,
  * and passively closes when client is done.

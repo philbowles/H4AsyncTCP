@@ -23,10 +23,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 #include "H4AsyncTCP.h"
-#include "raw.h"
 
 //
-void mbx::_create(H4L_request*  c,uint8_t* p){
+void mbx::_create(H4AsyncClient*  c,uint8_t* p){
 //    Serial.printf("mbx::_create 0x%08x p=0x%08x m=%d\n",c,p,managed);
     _c=c;
     if(managed){
@@ -49,7 +48,7 @@ void mbx::ack(){
     clear();
 }
 
-void mbx::clear(H4L_request* c, uint8_t* p){
+void mbx::clear(H4AsyncClient* c, uint8_t* p){
     if(c->pool.count(p)) {
         H4AT_PRINT4("FOR 0x%08x MBX DEL BLOCK 0x%08x\n",c,p);
         free(p);
@@ -59,7 +58,7 @@ void mbx::clear(H4L_request* c, uint8_t* p){
 
 void mbx::clear(){ clear(_c,data); }
 
-uint8_t* mbx::getMemory(H4L_request* c,size_t size){
+uint8_t* mbx::getMemory(H4AsyncClient* c,size_t size){
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
         c->pool.insert(mm);

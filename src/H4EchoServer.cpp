@@ -29,7 +29,8 @@ extern "C"{
 //
 //
 //
-H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncServer(_port){
+H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncWebServer(_port){
+    /*
     _client_cb=[=](tcp_pcb* tpcb){
         auto c=new H4AsyncClient(tpcb);
         c->onConnect([=]{
@@ -38,7 +39,7 @@ H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncServer(_port){
         });
 
         c->onPoll([&]{
-            /*
+
             Serial.printf("ECHO BEACH T=%d P=%d C=%d\n",c->_TXQ.size(),c->_PXQ.size(),c->_closeConnection);
             if(c->_TXQ.size()==0 && c->_PXQ.size()==0) {
                 if(c->_closeConnection){
@@ -48,7 +49,7 @@ H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncServer(_port){
                     return ERR_ABRT;
                 } else H4AT_PRINT3("0x%08x Ah! ah! ah! ah! stayin' alive\n",c);
             }
-            */
+
             return ERR_OK;
         });
 
@@ -60,4 +61,5 @@ H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncServer(_port){
         H4AsyncClient::_tcp_connected(c,c->_pcb,ERR_OK);
     //    return c;
     };
+    */
 }
