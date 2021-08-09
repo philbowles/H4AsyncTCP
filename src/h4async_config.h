@@ -31,11 +31,12 @@ SOFTWARE.
 
     4 - a lot
 */
-#define H4AT_DEBUG 0
+#define H4AT_DEBUG 3
 
 #define H4AT_CHECK_FINGERPRINT 0
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches
 
-#define H4AS_SSE_KA_ID 92
-#define H4AS_SCAVENGE_ID 93
-#define H4AS_SCAVENGE_FREQ 15000
+#define H4AT_CNX_TIMEOUT       5
+// amount of seconds after outbound connect is deemd to have failed
+
+#define H4AS_SCAVENGE_FREQ 10000

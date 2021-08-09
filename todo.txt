@@ -1,4 +1,4 @@
-manifest for HTTP_GET
-re-order prams to be more like shitlibs
-cache header / age ctro param
 chunkl file on handler
+optimised evt message routine
+post
+auto options header handler

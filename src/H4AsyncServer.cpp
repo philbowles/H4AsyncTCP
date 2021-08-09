@@ -22,44 +22,36 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-#include<H4EchoServer.h>
+#include<H4AsyncTCP.h>
+
 extern "C"{
   #include "lwip/tcp.h"
 }
+
+static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
+    H4AT_PRINT1("RAW _raw_accept srv=%p p=%p e=%d\n",arg,newpcb,err);
+    reinterpret_cast<H4AsyncServer*>(arg)->_incoming(newpcb);
+    return ERR_OK;
+}
 //
+//      H4AsyncServer
 //
-//
-H4EchoServer::H4EchoServer(uint16_t _port): H4AsyncWebServer(_port){
-    /*
-    _client_cb=[=](tcp_pcb* tpcb){
-        auto c=new H4AsyncClient(tpcb);
-        c->onConnect([=]{
-            IPAddress ip(ip_addr_get_ip4_u32(&c->_pcb->remote_ip));
-            H4AT_PRINT2("0x%08x CLIENT incoming=0x%08x from %s:%d\n",this,(void*)c,ip.toString().c_str(),c->_pcb->remote_port);
-        });
+void H4AsyncServer::newConnection(struct tcp_pcb *p,H4AsyncClient* c){
+    H4AT_PRINT1("NEW CONNECTION %p RQDST=%p Tot=%d starting scavenger\n",p,c,H4AsyncClient::openConnections.size()+1);
+    tcp_setprio(p, TCP_PRIO_MIN);
+    H4AsyncClient::openConnections.insert(c);
+    H4AsyncClient::scavenge();
+}
 
-        c->onPoll([&]{
-
-            Serial.printf("ECHO BEACH T=%d P=%d C=%d\n",c->_TXQ.size(),c->_PXQ.size(),c->_closeConnection);
-            if(c->_TXQ.size()==0 && c->_PXQ.size()==0) {
-                if(c->_closeConnection){
-                    H4AT_PRINT3("0x%08x HAD ENOUGH OF THIS LIFE \n",c);
-                    c->close();
-                    tcp_abort(c->_pcb);
-                    return ERR_ABRT;
-                } else H4AT_PRINT3("0x%08x Ah! ah! ah! ah! stayin' alive\n",c);
-            }
-
-            return ERR_OK;
-        });
-
-        c->rx([=](const uint8_t* data, size_t len){ c->txdata(data,len); });
-        // set to sideload
-        tcp_setprio(c->_pcb, TCP_PRIO_MIN);
-        tcp_arg(c->_pcb, c);
-        
-        H4AsyncClient::_tcp_connected(c,c->_pcb,ERR_OK);
-    //    return c;
-    };
-    */
+void H4AsyncServer::begin(){
+    _raw_pcb = tcp_new();
+    if (_raw_pcb != NULL) {
+        err_t err;
+        tcp_arg(_raw_pcb,this);
+        err = tcp_bind(_raw_pcb, IP_ADDR_ANY, _port);
+        if (err == ERR_OK) {
+            _raw_pcb = tcp_listen(_raw_pcb);
+            tcp_accept(_raw_pcb, _raw_accept);
+        } //else Serial.printf("RAW CANT BIND\n");
+    } //    else Serial.printf("RAW CANT GET NEW PCB\n");
 }

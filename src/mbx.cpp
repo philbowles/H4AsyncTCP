@@ -1,68 +1,69 @@
 /*
-MIT License
+Creative Commons: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 
-Copyright (c) 2020 Phil Bowles with huge thanks to Adam Sharp http://threeorbs.co.uk
-for testing, debugging, moral support and permanent good humour.
+You are free to:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Share — copy and redistribute the material in any medium or format
+Adapt — remix, transform, and build upon the material
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+The licensor cannot revoke these freedoms as long as you follow the license terms. Under the following terms:
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Attribution — You must give appropriate credit, provide a link to the license, and indicate if changes were made. 
+You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use.
+
+NonCommercial — You may not use the material for commercial purposes.
+
+ShareAlike — If you remix, transform, or build upon the material, you must distribute your contributions 
+under the same license as the original.
+
+No additional restrictions — You may not apply legal terms or technological measures that legally restrict others 
+from doing anything the license permits.
+
+Notices:
+You do not have to comply with the license for elements of the material in the public domain or where your use is 
+permitted by an applicable exception or limitation. To discuss an exception, contact the author:
+
+philbowles2012@gmail.com
+
+No warranties are given. The license may not give you all of the permissions necessary for your intended use. 
+For example, other rights such as publicity, privacy, or moral rights may limit how you use the material.
 */
 #include "H4AsyncTCP.h"
 
-//
-void mbx::_create(H4AsyncClient*  c,uint8_t* p){
-//    Serial.printf("mbx::_create 0x%08x p=0x%08x m=%d\n",c,p,managed);
-    _c=c;
+mbx::mbx(uint8_t* p,size_t s,bool copy,uint8_t f): len(s),managed(copy),flags(f){
     if(managed){
-        data=getMemory(c,len);
-        if(data) memcpy(data,p,len);
-        else H4AT_PRINT4("MBX 0x%08x len=%d MALLOC FAIL\n",(void*) data,len);
-    } else data=p;
+        data=getMemory(len);
+        if(data) {
+            memcpy(data,p,len);
+            H4AT_PRINT4("MBX %p len=%d COPIED FROM %p POOL=%d\n",(void*) data,len,p,pool.size());
+        }
+        else H4AT_PRINT4("MBX %p len=%d MALLOC FAIL\n",(void*) data,len);
+    } 
+    else {
+        H4AT_PRINT4("MBX %p len=%d UNMANAGED POOL=%d\n",p,len,pool.size());
+        data=p;
+    }
 }
 //
 // public
 //
-void mbx::ack(){
-    H4AT_PRINT4("MBX ACK 0x%08x len=%d  frag=0x%08x\n",(void*) data,len,frag);
-    if(frag){
-        H4AT_PRINT4("MBX FRAG=0x%08x\n",frag);
-        if((int) frag < 1000) return; // some arbitrarily ridiculous max numberof _fragments SANITIZE as f of heap/mss
-        data=frag; // reset data pointer to FIRST fragment, so whole block is freed
-        H4AT_PRINT4("MBX DELETE MASTER FRAG=0x%08x\n",frag);
-    }
-    clear();
-}
-
-void mbx::clear(H4AsyncClient* c, uint8_t* p){
-    if(c->pool.count(p)) {
-        H4AT_PRINT4("FOR 0x%08x MBX DEL BLOCK 0x%08x\n",c,p);
+void mbx::clear(uint8_t* p){
+    if(pool.count(p)) {
+        H4AT_PRINT4("MBX DEL BLOCK %p\n",p);
         free(p);
-        c->pool.erase(p);
-    }
+        pool.erase(p);
+        H4AT_PRINT4("MBX DEL %p POOL NOW %d\n",p,pool.size());
+    } else H4AT_PRINT4("INSANITY? %p NOT IN POOL!\n",p);
 }
 
-void mbx::clear(){ clear(_c,data); }
+void mbx::clear(){ clear(data); }
 
-uint8_t* mbx::getMemory(H4AsyncClient* c,size_t size){
+uint8_t* mbx::getMemory(size_t size){
     uint8_t* mm=static_cast<uint8_t*>(malloc(size));
     if(mm){
-        c->pool.insert(mm);
-        H4AT_PRINT4("MBX MANAGED MEMORY BLOCK ALLOCATED 0x%08x len=%d\n",mm,size);
-    } else H4AT_PRINT1("********** MBX FAIL STATUS: FH=%u MXBLK=%u ASKED:%u\n",_HAL_freeHeap(),_HAL_maxHeapBlock(),size);
+        pool.insert(mm);
+        H4AT_PRINT4("MBX GM %p len=%d POOL=%d\n",mm,size,pool.size());
+    } else H4AT_PRINT4("********** MBX FAIL STATUS: FH=%u MXBLK=%u ASKED:%u\n",_HAL_freeHeap(),_HAL_maxHeapBlock(),size);
     return mm;
 }
