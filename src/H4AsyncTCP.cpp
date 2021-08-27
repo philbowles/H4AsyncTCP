@@ -31,17 +31,16 @@ No warranties are given. The license may not give you all of the permissions nec
 For example, other rights such as publicity, privacy, or moral rights may limit how you use the material.
 */
 #include <H4AsyncTCP.h>
-
 #include "IPAddress.h"
 
 extern "C"{
-    #include "lwip/opt.h"
     #include "lwip/tcp.h"
-    #include "lwip/inet.h"
     #include "lwip/dns.h"
 }
 
-H4AT_MEM_POOL               mbx::pool;
+#ifdef ARDUINO_ARCH_ESP32
+    #include "lwip/priv/tcpip_priv.h"
+#endif
 
 std::unordered_set<H4AsyncClient*> H4AsyncClient::openConnections;
 
@@ -70,15 +69,16 @@ H4_INT_MAP H4AsyncClient::_errorNames={
     {H4AT_HEAP_LIMITER_ON,"Heap Limiter ON"},
     {H4AT_HEAP_LIMITER_OFF,"Heap Limiter OFF"},
     {H4AT_HEAP_LIMITER_LOST,"Heap Limiter: packet discarded"},
-    {H4AT_INPUT_TOO_BIG,"Input too big"},
-    {H4AT_INPUT_PILEUP,"Input too fast for bandwidth"},
+    {H4AT_INPUT_TOO_BIG,"Input exceeds safe heap"},
+    {H4AT_OUTPUT_TOO_BIG,"Output exceeds safe heap"}
 #endif
 };
-
+/*
 void _ocGuard(H4AsyncClient *rq,H4_FN_VOID f){
     if(H4AsyncClient::openConnections.count(rq)) f();
     else H4AT_PRINT1("INVALID ACTION ON %p - ALREADY GONE!!!\n",rq);
 }
+*/
 /*
 enum tcp_state {
   CLOSED      = 0,
@@ -107,54 +107,46 @@ static const char * const tcp_state_str[] = {
   "TIME_WAIT"
 };
 */
-void _raw_close(H4AsyncClient *rq,bool abort){
-    H4AT_PRINT1("RAW CLOSE ENTRY RQ=%p abort=%d PXQ=%d IPQ=%d\n",rq,abort,rq->_PXQ.size(),rq->_fragments.size());
-    _ocGuard(rq,[=]{
-        H4AT_PRINT1("RAW _raw_close RQ=%p 2\n",rq);
-        struct tcp_pcb *tpcb=rq->pcb;
-        H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p 3\n",rq,tpcb);
-        if(tpcb){
-            if(rq->_inIPQ){
-                Serial.printf("FRAGMENT PROBLEMS!!!!!!!!!!!!!!!!!!!!! %d\n",rq->_fragments.size());
-//                while(!rq->_fragments.empty()){
-//                    rq->_fragments.front().clear();
-//                    rq->_fragments.pop();
-//                }
-//                rq->_inIPQ=false;
-            }
-            if(rq->_PXQ.size()){
-                Serial.printf("PXQ PROBLEMS!!!!!!!!!!!!!!!!!!!!! %d\n",rq->_PXQ.size());
-                while(!rq->_PXQ.empty()){
-                    rq->_PXQ.front().clear();
-                    rq->_PXQ.pop();
-                }
-                Serial.printf("PXQ cleared %d\n",rq->_PXQ.size());
-            }
-            H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p STATE=%d 4\n",rq,tpcb,tpcb->state);
-            if(abort) tcp_abort(tpcb);
-            tcp_arg(tpcb, NULL); // do we need this / these ?
-            tcp_recv(tpcb, NULL);
-            tcp_err(tpcb, NULL);
-            H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p STATE=%d 5\n",rq,tpcb,tpcb->state);
-            err_t err=tcp_close(tpcb);
-            H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p STATE=%d 6\n",rq,tpcb,tpcb->state);
-            if(err) Serial.printf("WTF 67???????????????????????????? %d\n",err);
-            rq->pcb=NULL; // == eff = reset;
-            H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p STATE=%d 7\n",rq,tpcb,tpcb->state);
-            if(rq->_cbDisconnect) rq->_cbDisconnect();
-            H4AT_PRINT1("RAW _raw_close RQ=%p PCB=%p STATE=%d 8\n",rq,tpcb,tpcb->state);
-        } else Serial.printf("WTF???? tpcb=0!\n");
-    });
+typedef struct {
+    struct tcp_pcb* pcb;
+    const uint8_t* data;
+    size_t size;
+    uint8_t apiflags;
+} tcp_api_call_t;
+
+void H4AsyncClient::_shutdown(){
+    H4AT_PRINT1("_shutdown %p\n",this);
+    if(pcb){
+        H4AT_PRINT1("RAW 1 cleanup queues PCB=%p STATE=%d\n",pcb,pcb->state);
+        _clearDanglingInput();
+        H4AT_PRINT1("RAW 2 clean STATE=%d\n",pcb->state);
+        tcp_arg(pcb, NULL);
+        tcp_recv(pcb, NULL);
+        tcp_err(pcb, NULL);
+        err_t err=ERR_OK;
+        H4AT_PRINT1("RAW 3 CLOSE STATE=%d\n",pcb->state);
+        err=tcp_close(pcb);
+        H4AT_PRINT1("RAW 4 err=%d STATE=%d\n",err,pcb->state);
+        if(_cbDisconnect) _cbDisconnect();
+        H4AT_PRINT1("RAW 4a err=%d STATE=%d\n",err,pcb->state);
+        pcb=NULL; // == eff = reset;
+        auto c=this;
+        h4.queueFunction([c]{
+            H4AT_PRINT1("RAW 5 offload %p\n",c);
+            openConnections.erase(c);
+            H4AT_PRINT1("RAW 6 OC cleared\n");
+            delete c;
+        });
+    } //else Serial.printf("WTF???? %p pcb=0!\n",this);
 }
 
-err_t _raw_poll(void *arg, struct tcp_pcb *tpcb){
-//    Serial.printf("T=%u POLL!\n",millis());
+err_t _raw_poll(void *arg, struct tcp_pcb *tpcb){ // purely for startup timeout shortening
     auto c=reinterpret_cast<H4AsyncClient*>(arg);
+    H4AT_PRINT2("_raw_poll %p %p\n",arg,c);
     static size_t tix=0;
     tix++;
     if(!(tix%c->_cnxTimeout)){
         tix=0;
-//        Serial.printf("T=%u BOSH it!\n",millis());
         tcp_abort(tpcb);
         c->pcb=NULL;
         return ERR_ABRT;
@@ -165,57 +157,60 @@ err_t _raw_poll(void *arg, struct tcp_pcb *tpcb){
 void _raw_error(void *arg, err_t err){
     H4AT_PRINT2("CONNECTION %p *ERROR* err=%d %s\n",arg,err,H4AsyncClient::errorstring(err).data());
     auto rq=reinterpret_cast<H4AsyncClient*>(arg);
-    if(err) { if(rq->_cbError) rq->_cbError(err,0); }
-    else Serial.printf("NO NEED TO PANIC!!!\n");
+    if(err) { rq->_notify(err,0); }
+    //else Serial.printf("NO NEED TO PANIC!!!\n");
 }
 
 err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
     if(err) Serial.printf("WATTTTTAAAAFFFFFFFFFF???? %d\n",err);
     auto rq=reinterpret_cast<H4AsyncClient*>(arg);
-    H4AT_PRINT1("CONNECTION %p raw_recv PCB=%p PBUF=%p PL=%p L=%d\n",arg,tpcb,p,p ? p->payload:0,p ? p->tot_len:666);
-    _ocGuard(rq,[&]{
-        if (p == NULL) {
-            H4AT_PRINT2("CONNECTION %p remote host closed connection PCB=%p b=%p e=%d\n",arg,tpcb,p,err);
-            _raw_error(rq,ERR_CLSD);
-            _raw_close(rq);
-            return ERR_ABRT;
-        }
-        else {
-            if(rq->_inIPQ){
-                Serial.printf("************************ I can feel my lifetime piling up...\n");
-                _raw_error(rq,H4AT_INPUT_PILEUP);
-                _raw_close(rq);
-                return ERR_ABRT;
-            }
-            else {
-                rq->_lastSeen=millis();
-                H4AT_PRINT1("GRAB DATA %p %d from pcb\n",p->payload,p->tot_len);
-//                HAL_disableInterrupts();
-                rq->_fragments.push(mbx((uint8_t*) p->payload,p->tot_len,true,p->flags));
-                rq->_stored+=p->tot_len;
-//                HAL_enableInterrupts();
-                if(p->flags & PBUF_FLAG_PUSH) h4.queueFunction([=]{ rq->_runIPQ(); });
-                tcp_recved(tpcb, p->tot_len);
-                pbuf_free(p);                    
-                return ERR_OK;
-            }
-        }
-    });
-    return ERR_ABRT;
+    if(rq->_closing){
+        Serial.printf("_raw_recv during close %p pcb=%p!!!\n",rq,p);
+        return ERR_ABRT;
+    }
+    //H4AT_PRINT1("CONNECTION %p raw_recv PCB=%p PBUF=%p PL=%p L=%d\n",arg,tpcb,p,p ? p->payload:0,p ? p->tot_len:0);
+    if (p == NULL) {
+        rq->_closing=true;
+        H4AT_PRINT1("CONNECTION %p remote host closed connection PCB=%p b=%p e=%d\n",rq,tpcb,p,err);
+        _raw_error(rq,ERR_CLSD);
+        rq->_shutdown();
+        return ERR_ABRT;
+    }
+    else {
+    Serial.printf("************* _raw_recv %p %p\n",tpcb,p);
+    dumphex((const uint8_t*) p->payload,64);
+        rq->_lastSeen=millis();
+        auto cp=p;
+        auto ctpcb=tpcb;
+        H4AT_PRINT1("************* GRAB DATA %p %d 0x%02x bpp=%p\n",cp->payload,cp->tot_len,cp->flags,rq->_bpp);
+            h4.queueFunction(
+            [rq,cp]{
+                rq->_handleFragment((const uint8_t*) cp->payload,cp->tot_len,cp->flags);
+            },
+            [rq,ctpcb,cp]{
+                tcp_recved(ctpcb, cp->tot_len);
+                H4AT_PRINT1("************* FREE DATA %p %d 0x%02x bpp=%p\n",cp->payload,cp->tot_len,cp->flags,rq->_bpp);
+                pbuf_free(cp);
+            });
+        return ERR_OK;
+    }
 }
 
 err_t _tcp_connected(void* arg, void* tpcb, err_t err){
     auto rq=reinterpret_cast<H4AsyncClient*>(arg);
-    tcp_poll(reinterpret_cast<struct tcp_pcb*>(tpcb),NULL,0);
-    H4AT_PRINT1("C=%p cnx timer %d cancelled\n",rq,H4AT_CNX_TIMEOUT); //rq->_cnxTimeout);
     auto p=reinterpret_cast<tcp_pcb*>(tpcb);
+    tcp_poll(p,NULL,0);
+    H4AT_PRINT2("C=%p cnx timer %d cancelled\n",rq,H4AT_CNX_TIMEOUT); //rq->_cnxTimeout);
+
 #if H4AT_DEBUG
     IPAddress ip(ip_addr_get_ip4_u32(&p->remote_ip));
     H4AT_PRINT2("C=%p _tcp_connected p=%p e=%d IP=%s:%d\n",rq,tpcb,err,ip.toString().c_str(),p->remote_port);
 #endif
+    h4.queueFunction([rq]{
+        H4AsyncClient::openConnections.insert(rq);
+        if(rq->_cbConnect) rq->_cbConnect();
+    });
     tcp_recv(p, &_raw_recv);
-    H4AsyncClient::openConnections.insert(rq);
-    if(rq->_cbConnect) rq->_cbConnect();
     return ERR_OK;
 }
 
@@ -231,49 +226,54 @@ void _tcp_dns_found(const char * name, struct ip_addr * ipaddr, void * arg) {
         if(rq->_cbError) rq->_cbError(H4AT_ERR_DNS_NF,0);
     }
 }
+
+#ifdef ARDUINO_ARCH_ESP32
+static err_t _tcp_write_api(struct tcpip_api_call_data *api_call_params){
+#else
+static err_t _tcp_write_api(void *api_call_params){
+#endif
+    tcp_api_call_t * params = (tcp_api_call_t *)api_call_params;
+    auto err = tcp_write(params->pcb, params->data, params->size, params->apiflags);
+    if(err) Serial.printf("ERR %d after write H=%u sb=%d Q=%d\n",err,_HAL_freeHeap(),tcp_sndbuf(params->pcb),tcp_sndqueuelen(params->pcb));
+    return err;
+}
+
+static err_t _tcp_write(struct tcp_pcb* p,const uint8_t* data, size_t size, uint8_t apiflags) {
+    tcp_api_call_t params{p,data,size,apiflags};
+    #ifdef ARDUINO_ARCH_ESP32
+        return tcpip_api_call(_tcp_write_api, (struct tcpip_api_call_data*)&params);
+    #else
+        return _tcp_write_api((void*) &params);
+    #endif
+}
 //
 //
 //
 H4AsyncClient::H4AsyncClient(struct tcp_pcb *newpcb,size_t timeout): pcb(newpcb),_cnxTimeout(timeout){
-    H4AT_PRINT1("H4AC CTOR %p PCB=%p\n",this,newpcb);
+    _heapLO=(_HAL_freeHeap() * H4T_HEAP_CUTOUT_PC) / 100;
+    _heapHI=(_HAL_freeHeap() * H4T_HEAP_CUTIN_PC) / 100;
+    H4AT_PRINT1("H4AC CTOR %p PCB=%p LO=%u HI=%u\n",this,newpcb,_heapLO,_heapHI);
     if(pcb){
         tcp_arg(pcb, this);
         tcp_recv(pcb, _raw_recv);
         tcp_err(pcb, _raw_error);
-        tcp_nagle_enable(pcb); // FIX!!!!!!!!!
+//        tcp_nagle_enable(pcb); // FIX!!!!!!!!!
     }
-}
-
-H4AsyncClient::~H4AsyncClient(){
-    H4AT_PRINT1("H4AsyncClient DTOR %p pool=%d PXQ=%d\n",this,mbx::pool.size(),_PXQ.size());
 }
 
 void H4AsyncClient::_busted(size_t len) {
-    _clearFragments();
-//    mbxemptyPool();
-//_cbError(H4AT_INPUT_TOO_BIG,len);
+    _clearDanglingInput();
+    _notify(H4AT_INPUT_TOO_BIG,len);
 }
 
-void H4AsyncClient::_clearFragments() {
-    H4AT_PRINT1("_clearFragments %p N=%d pool=%d\n",this,_fragments.size(),mbx::pool.size());
-    while(!_fragments.empty()){
-        _fragments.front().clear();
-        _fragments.pop();
+void H4AsyncClient::_clearDanglingInput() {
+  H4AT_PRINT1("_clearDanglingInput <-- %u\n",_HAL_freeHeap());
+    if(_bpp){
+        H4AT_PRINT1("_clearDanglingInput p=%p _s=%d\n",_bpp,_stored);
+        free(_bpp);
+        _bpp=nullptr;
+        _stored=0;
     }
-}
-
-void H4AsyncClient::_cnxGuard(H4_FN_VOID f) { // tidy this
-    H4AT_PRINT1("_cnxGuard p=%p\n",pcb);
-    if(pcb){
-        H4AT_PRINT1("_cnxGuard state=%d\n",pcb->state);
-        switch(pcb->state){
-            case 2:
-            case 4:
-                if(_cbError) _cbError(pcb->state == 4 ? ERR_ISCONN:ERR_ALREADY,pcb->state);
-                return;
-        }
-    }
-    else f();
 }
 
 void H4AsyncClient::_connect() {
@@ -285,39 +285,6 @@ void H4AsyncClient::_connect() {
     size_t err = tcp_connect(pcb, &_URL.addr, _URL.port,(tcp_connected_fn)&_tcp_connected);
     if(err) { if(_cbError) _cbError(err,0); }
     tcp_poll(pcb,&_raw_poll,2);
-}
-
-void H4AsyncClient::_runIPQ() {
-    if(pcb){
-        if(_fragments.size()==1){
-            H4AT_PRINT1("Non fragged optimisation!\n");
-            _rxfn(_fragments.front().data,_fragments.front().len);
-            _fragments.front().clear();
-            _fragments.pop();
-        }
-        else {
-            _inIPQ=true;
-            uint8_t* bpp=mbx::getMemory(_stored);
-            size_t  pktsz=_stored;
-            if(bpp){
-                uint8_t* p=bpp;
-                while(!_fragments.empty()){
-                    H4AT_PRINT1("RECREATE %p len=%d\n",_fragments.front().data,_fragments.front().len);
-                    memcpy(p,_fragments.front().data,_fragments.front().len);
-                    p+=_fragments.front().len;
-                    _fragments.front().clear();
-                    _fragments.pop();
-                    _HAL_feedWatchdog();
-                }
-                H4AT_PRINT1("CALL USER %p _stored=%d\n",bpp,pktsz);
-                _rxfn(bpp,pktsz);
-                H4AT_PRINT1("BACK FROM USER BPP=%p l=%d\n",bpp,pktsz);
-                mbx::clear(bpp);
-            } else _busted(_stored);
-            _inIPQ=false;
-        }
-        _stored=0;
-    } else Serial.printf("EEEEEEEEEEEEEEEEKKKKKKKKKKKKKK IPQ with no PCB!!!\n");
 }
 
 void  H4AsyncClient::_parseURL(const std::string& url){
@@ -347,136 +314,129 @@ void  H4AsyncClient::_parseURL(const std::string& url){
     }
 }
 
-void H4AsyncClient::_runPXQ(){
-    H4AT_PRINT2("_runPXQ\n");
-    if(_PXQ.size() && (!_pxqRunning)){
-        _pxqRunning=h4.repeatWhile(
-            [&]{ return _PXQ.size(); },1, // this is baffling! 
-            [=]{ _TX(); },
-            [&]{
-                H4AT_PRINT4("PXQ DRAINED\n");
-                _pxqRunning=nullptr;
-            }
-        );
+uint8_t* H4AsyncClient::_addFragment(const uint8_t* data,u16_t len){
+    if(_stored + len > maxPacket()){
+        _clearDanglingInput();
+        _notify(H4AT_INPUT_TOO_BIG,_stored + len);
+        return nullptr;
     }
-}
-
-void H4AsyncClient::_TX(){
-    H4AT_PRINT2("TX %p len=%d PXQ=%d managed=%d PCB=%p\n",_PXQ.front().data,_PXQ.front().len,_PXQ.size(),_PXQ.front().managed,pcb);
-    uint8_t flags=_PXQ.front().managed ? TCP_WRITE_FLAG_COPY:0;
-    uint8_t* base=_PXQ.front().data;
-    while(_PXQ.front().len){
-        if(pcb){
-            int available=tcp_sndbuf(pcb);
-            if(available){
-                auto chunk=std::min(_PXQ.front().len,available);
-                H4AT_PRINT2("remaining=%d available=%d chunk=%d\n",_PXQ.front().len,available,chunk);
-                if(_PXQ.front().len) flags |= TCP_WRITE_FLAG_MORE;
-                err_t err=tcp_write(pcb,_PXQ.front().data,chunk,flags);
-                H4AT_PRINT2("remaining err=%d\n",err);
-                if(!err){
-                    _lastSeen=millis();
-                    _PXQ.front().data+=chunk;
-                    _PXQ.front().len-=chunk;
-                }
-                else {
-                    if(_cbError) _cbError(err,22);
-                    break;
-                }
-            } 
-            else {
-//                H4AT_PRINT2("relax and swing...%d",tcp_sndbuf(pcb));
-                _HAL_feedWatchdog(); 
-                yield();
-            }
-        } 
+    else {
+        uint8_t* p=static_cast<uint8_t*>(realloc(_bpp,_stored+len));
+        H4AT_PRINT1("AF realloc %p freed, new=%p\n",_bpp,p);
+        free(_bpp);
+        if(p){
+            _bpp=p;
+            memcpy(_bpp+_stored,data,len);
+            _stored+=len;
+            return p;
+        }
+        // shouldn't ever happen!
         else {
-            Serial.printf("WAAAAAAAATTTTTTTTTTT   FFFFFFFFFFF NO PCB!!!!! PXQ=%d\n",_PXQ.size());
-//            while(!_PXQ.empty()){
-//                _PXQ.front().clear();
-//                _PXQ.pop();
-//            }
-            break;
+            Serial.printf("not enough realloc mem\n");
+            _clearDanglingInput();
+            return nullptr;
         }
     }
-    mbx::clear(base);
-    if(!_PXQ.empty()) _PXQ.pop(); // edge case where close has alreayd cleared Q
-}
-//
-//
-//
-void H4AsyncClient::close(){ 
-    _lastSeen=0;
-    scavenge();
 }
 
-void H4AsyncClient::connect(const char* host,uint16_t port){
-    H4AT_PRINT1("connect h=%s, port=%d\n",host,port);
-    _cnxGuard([=]{
+void H4AsyncClient::_handleFragment(const uint8_t* data,u16_t len,u8_t flags) {
+    H4AT_PRINT1("%p _handleFragment %p %d f=0x%02x bpp=%p _s=%d\n",this,data,len,flags,_bpp,_stored);
+    if(!_closing){
+        if(flags & PBUF_FLAG_PUSH){
+            if(!_stored) _rxfn(data,len);
+            else {
+                if(!_addFragment(data,len)) _notify(ERR_MEM,len);
+                else {
+                    _rxfn(_bpp,_stored);
+                    _clearDanglingInput();
+                }
+            }
+        } else if(!_addFragment(data,len)) _notify(ERR_MEM,len);
+    } else Serial.printf("HF while closing!!!\n");
+}
+
+bool H4AsyncClient::_heapGuard(H4_FN_VOID f){
+    static size_t limit=_heapLO;
+    auto h=_HAL_freeHeap();
+    //H4AT_PRINT1("Heapguard h=%u LO=%u HI=%u LIM=%u\n",h,_heapLO,_heapHI,limit);
+    if(h > limit){
+        if(limit == _heapHI){
+            limit = _heapLO;
+            _notify(H4AT_HEAP_LIMITER_OFF,h);
+        }
+        f();
+        return true;
+    }
+    else {
+        if(limit == _heapLO){
+            limit = _heapHI;
+            _notify(H4AT_HEAP_LIMITER_ON,h);
+        }
+    }
+    return false;
+}
+
+void H4AsyncClient::_scavenge(){
+    h4.repeatWhile(
+        []{ return openConnections.size(); },
+        H4AS_SCAVENGE_FREQ,
+        []{
+            H4AT_PRINT1("SCAVENGE CONNECTIONS!\n");
+            std::vector<H4AsyncClient*> tbd;
+            for(auto &oc:openConnections){
+                H4AT_PRINT1("T=%u OC %p ls=%u age(s)=%u SCAV=%u\n",millis(),oc,oc->_lastSeen,(millis() - oc->_lastSeen) / 1000,H4AS_SCAVENGE_FREQ);
+                if((millis() - oc->_lastSeen) > H4AS_SCAVENGE_FREQ) tbd.push_back(oc);
+            }
+            for(auto &rq:tbd) {
+                rq->_closing=true;
+                rq->_shutdown();
+            }
+        },
+        []{
+            h4.cancel();
+            H4AT_PRINT1("Scavenging stopped\n"); 
+        },
+        H4AT_SCAVENGER_ID,
+        true
+    );
+}
+//
+//      PUBLICS
+//
+void H4AsyncClient::connect(const std::string& host,uint16_t port){
+    H4AT_PRINT2("connect h=%s, port=%d\n",host.data(),port);
+//    _cnxGuard([=]{
         IPAddress ip;
-        if(ip.fromString(host)) connect(ip,port);
+        if(ip.fromString(host.data())) connect(ip,port);
         else {
-//            Serial.printf("look me up!:%s => %d\n",host,ip.fromString(host));
             _URL.port=port;
-            err_t err = dns_gethostbyname(host, &_URL.addr, (dns_found_callback)&_tcp_dns_found, this);
-//            Serial.printf("look me up!:%s => %d err=%d\n",host,ip.fromString(host),err);
+            err_t err = dns_gethostbyname(host.data(), &_URL.addr, (dns_found_callback)&_tcp_dns_found, this);
             if(err != ERR_OK) {
-                if(_cbError) _cbError(H4AT_ERR_DNS_FAIL,0);
+                _notify(H4AT_ERR_DNS_FAIL,0);
                 return;
             }
         }
-    });
+//    });
 }
 
-void H4AsyncClient::connect(const char* url){
-    H4AT_PRINT1("connect url=%s\n",url);
+void H4AsyncClient::connect(const std::string& url){
     _parseURL(url);
-    connect(_URL.host.data(),_URL.port);
+   connect(_URL.host.data(),_URL.port);
 }
 
 void H4AsyncClient::connect(IPAddress ip,uint16_t port){
-    H4AT_PRINT1("connect ip=%s, port=%d\n",ip.toString().c_str(),_URL.port);
-    _cnxGuard([=]{
+    H4AT_PRINT2("connect ip=%s, port=%d\n",ip.toString().c_str(),_URL.port);
+//    _cnxGuard([=]{
         _URL.port=port;
         ip_addr_set_ip4_u32(&_URL.addr, ip);
         _connect();
-    });
-}
-
-void H4AsyncClient::connect(){ 
-    H4AT_PRINT1("connect uh=%s, uport=%d\n",_URL.host.data(),_URL.port);
-    connect(_URL.host.data(),_URL.port);
+//    });
 }
 
 bool H4AsyncClient::connected(){ return pcb && pcb->state== 4; }
 
-void H4AsyncClient::dumpQ(H4AT_MSG_Q& q) {
-#if H4AT_DEBUG
-    H4AT_MSG_Q cq=q;
-    H4AT_PRINT2("dumpQ: size=%d\n",q.size());
-    while(!cq.empty()){
-        mbx tmp=cq.front();
-        Serial.printf("DUMPQ data=%p len=%d\n",tmp.data,tmp.len);
-        cq.pop();
-    }
-#endif
-}
-
-void H4AsyncClient::dump(){ 
-#if H4AT_DEBUG
-    H4AT_PRINT1("LOCAL: RAW=%p IPA=%s, IPS=%s port=%d\n",localAddress(),localIP().toString().c_str(),localIPstring().data(),localPort());
-    H4AT_PRINT1("REMOTE: RAW=%p IPA=%s, IPS=%s port=%d\n",remoteAddress(),remoteIP().toString().c_str(),remoteIPstring().data(),remotePort());
-    H4AT_PRINT1("Last Seen=%u Age(s)=%u\n",_lastSeen,(millis()-_lastSeen)/1000);
-
-//    mbxdumpPool(32);
-    dumpQ(_PXQ);
-//    for(auto & p:_fragments) Serial.printf("MBX %p len=%d\n",(void*) p.data,p.len);
-#endif
-}
-
 std::string H4AsyncClient::errorstring(int e){
     #ifdef H4AT_DEBUG
-        H4AT_PRINT1("errorstring(%d)\n",e);
         if(_errorNames.count(e)) return _errorNames[e];
         else return stringFromInt(e); 
     #else
@@ -489,84 +449,51 @@ IPAddress H4AsyncClient::localIP(){ return IPAddress( localAddress()); }
 std::string H4AsyncClient::localIPstring(){ return std::string(localIP().toString().c_str()); }
 uint16_t H4AsyncClient::localPort(){ return pcb->local_port; };
 
+void H4AsyncClient::nagle(bool enable){
+    if(pcb){
+        if(enable) tcp_nagle_enable(pcb);
+        else tcp_nagle_disable(pcb);
+    } else Serial.printf("NAGLE PCB NULL\n");
+}
+
 uint32_t H4AsyncClient::remoteAddress(){ return ip_addr_get_ip4_u32(&pcb->remote_ip); }
 IPAddress H4AsyncClient::remoteIP(){ return IPAddress( remoteAddress()); }
 std::string H4AsyncClient::remoteIPstring(){ return std::string(remoteIP().toString().c_str()); }
 uint16_t H4AsyncClient::remotePort(){ return pcb->remote_port;  }
 
-void H4AsyncClient::TCPurl(const char* url,const uint8_t* fingerprint){
-    H4AT_PRINT1("TCPurl %s secure=%d\n",url,_URL.secure);
-    _parseURL(url);
-    /*
-    if(_URL.secure){
-    #if ASYNC_TCP_SSL_ENABLED
-        #if H4AT_CHECK_FINGERPRINT
-            if(fingerprint) memcpy(_fingerprint, fingerprint, SHA1_SIZE);
-            else _cbError(H4AT_TLS_NO_FINGERPRINT,0);
-        #endif
-    #else
-        _cbError(H4AT_TLS_NO_SSL,0);
-    #endif
-    } //else if(fingerprint) _cbError(H4AT_TLS_UNWANTED_FINGERPRINT,0);
-    */
-}
-
-void H4AsyncClient::txdata(const uint8_t* d,size_t len,bool copy){ 
-    H4AT_PRINT1("H4AsyncClient::txdata %p l=%d copy=%d\n",d,len,copy);
-    _ocGuard(this,[=]{ txdata(mbx((uint8_t*) d,len,copy)); }); 
-}
-
-void H4AsyncClient::txdata(mbx m){
-    _PXQ.push(m);
-    _runPXQ();
-/*
-//    _HAL_feedWatchdog(); // fpr BIG Q's
-    if(_heapLock){ // careful....!
-        H4AT_PRINT1("HEAPLOCKED DISCARD %u BYTES\n",m.len);
-        DISPATCH(this,Error,H4AT_HEAP_LIMITER_LOST,m.len);
-        m.clear();
-        return;
-    }
-    else {
-        auto h=_HAL_freeHeap();
-        if(h > safeHeapLimits.first) {
-            _PXQ.push(m);
-            _runPXQ();
-    }
-        else {
-            H4AT_PRINT1("HEAPLOCK FH=%u\n",h);
-            _heapLock=true;
-            DISPATCH(this,Error,H4AT_HEAP_LIMITER_ON,h);
-            txdata(m); // recurse to get rid of failed m
-        }
-    }
-   */
-}
-
-void H4AsyncClient::scavenge(){
-    h4.repeatWhile(
-        []{ return openConnections.size(); },
-        H4AS_SCAVENGE_FREQ,
-        []{
-            H4AT_PRINT1("SCAVENGE CONNECTIONS!\n");
-            std::vector<H4AsyncClient*> tbd;
-            for(auto &oc:openConnections){
-                H4AT_PRINT1("T=%u OC %p ls=%u age(s)=%u SCAV=%u\n",millis(),oc,oc->_lastSeen,(millis() - oc->_lastSeen) / 1000,H4AS_SCAVENGE_FREQ);
-                if((millis() - oc->_lastSeen) > H4AS_SCAVENGE_FREQ) tbd.push_back(oc);
+void H4AsyncClient::TX(const uint8_t* data,size_t len,bool copy){ 
+    H4AT_PRINT2("TX %p len=%d copy=%d max=%d\n",data,len,copy, maxPacket());
+    if(!_closing){    
+//        if(len > maxPacket()) {
+//            Serial.printf("maxPacket HMB=%d CPC=%d res=%d\n",_HAL_maxHeapBlock(),H4T_HEAP_CUTIN_PC, ( _HAL_maxHeapBlock() * (100-H4T_HEAP_CUTIN_PC)) / 100);
+//            _notify(H4AT_OUTPUT_TOO_BIG,len);
+//        }
+//        else {
+            uint8_t flags=copy ? TCP_WRITE_FLAG_COPY:0;
+            size_t  sent=0;
+            size_t  left=len;
+            _lastSeen=millis();
+            while(left){
+                size_t available=tcp_sndbuf(pcb);
+                if(available && (tcp_sndqueuelen(pcb) < TCP_SND_QUEUELEN )){
+                    auto chunk=std::min(left,available);
+                    if(left - chunk) flags |= TCP_WRITE_FLAG_MORE;
+                    H4AT_PRINT3("TX CHUNK %p len=%d left=%u f=0x%02x\n",data+sent,chunk,left,flags);
+                    auto err=_tcp_write(pcb,data+sent,chunk,flags);
+                    if(err){
+                        _notify(err,33);
+                        break;
+                    } 
+                    else {
+                        sent+=chunk;
+                        left-=chunk;
+                    }
+                } 
+                else {
+                    _HAL_feedWatchdog();
+                    yield();
+                }
             }
-            for(auto &rq:tbd) {
-                _raw_close(rq); // why not abort?
-                openConnections.erase(rq);
-                delete rq;
-            }
-            H4AT_PRINT1("\n");
-        },
-        []{
-            H4AT_PRINT1("ALL CONNECTIONS CLOSED!\n");
-            h4.cancel();
-            H4AT_PRINT1("Scavenging stopped\n"); 
-        },
-        H4AT_SCAVENGER_ID,
-        true
-    );
+//        }
+    } else H4AT_PRINT1("%p _TX called during close!\n",this);
 }

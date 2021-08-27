@@ -29,22 +29,47 @@ extern "C"{
 }
 
 static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
-    H4AT_PRINT1("RAW _raw_accept srv=%p p=%p e=%d\n",arg,newpcb,err);
-    reinterpret_cast<H4AsyncServer*>(arg)->_incoming(newpcb);
-    return ERR_OK;
+    Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
+    if(!err){
+        tcp_setprio(newpcb, TCP_PRIO_MIN);
+        H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
+        reinterpret_cast<H4AsyncServer*>(arg)->_newConnection(newpcb);
+        return ERR_OK;
+    } else {
+        Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
+        return err;
+    }
 }
 //
 //      H4AsyncServer
 //
-void H4AsyncServer::newConnection(struct tcp_pcb *p,H4AsyncClient* c){
-    H4AT_PRINT1("NEW CONNECTION %p RQDST=%p Tot=%d starting scavenger\n",p,c,H4AsyncClient::openConnections.size()+1);
-    tcp_setprio(p, TCP_PRIO_MIN);
-    H4AsyncClient::openConnections.insert(c);
-    H4AsyncClient::scavenge();
+void H4AsyncServer::_newConnection(struct tcp_pcb *p){
+    h4.queueFunction([=]{
+        Serial.printf("NEW CONNECTION --> pcb=%p\n",p);
+        auto c=_instantiateRequest(p);
+        if(c){
+            c->_lastSeen=millis();
+            Serial.printf("QF insert c --> in %p\n",c);
+            H4AsyncClient::openConnections.insert(c);
+            H4AT_PRINT1("QF insert c --> out %p\n",c);
+            c->onError([=](int e,int i){
+                if(e==ERR_MEM){
+                    Serial.printf("OOM ERROR %d\n",i);
+                    
+                } if(_srvError) _srvError(e,i);
+            });
+            H4AT_PRINT1("QF 1 %p\n",c);
+            c->onRX([=](const uint8_t* data,size_t len){ route(c,data,len); });
+            H4AT_PRINT1("QF 2 %p\n",c);
+            H4AsyncClient::_scavenge();
+            H4AT_PRINT1("QF 3 %p\n",c);
+        } //else Serial.printf("WHAT THE ACTUAL FUCK??? ZERO client ptr!");
+    });
 }
-
+//
 void H4AsyncServer::begin(){
-    _raw_pcb = tcp_new();
+    H4AT_PRINT1("SERVER %p begin\n",this);
+    static auto _raw_pcb = tcp_new();
     if (_raw_pcb != NULL) {
         err_t err;
         tcp_arg(_raw_pcb,this);
@@ -53,5 +78,5 @@ void H4AsyncServer::begin(){
             _raw_pcb = tcp_listen(_raw_pcb);
             tcp_accept(_raw_pcb, _raw_accept);
         } //else Serial.printf("RAW CANT BIND\n");
-    } //    else Serial.printf("RAW CANT GET NEW PCB\n");
+    } // else Serial.printf("RAW CANT GET NEW PCB\n");
 }

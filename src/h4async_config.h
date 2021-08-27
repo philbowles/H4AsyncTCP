@@ -22,7 +22,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
-#define H4ASYNC_VERSION "0.1.2"
+#define H4AT_VERSION "0.0.1"
 /*
     Debug levels: 
     0 - No debug messages, no debug functions
@@ -31,7 +31,7 @@ SOFTWARE.
 
     4 - a lot
 */
-#define H4AT_DEBUG 3
+#define H4AT_DEBUG 1
 
 #define H4AT_CHECK_FINGERPRINT 0
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches
@@ -39,4 +39,4 @@ SOFTWARE.
 #define H4AT_CNX_TIMEOUT       5
 // amount of seconds after outbound connect is deemd to have failed
 
-#define H4AS_SCAVENGE_FREQ 10000
+#define H4AS_SCAVENGE_FREQ 20000

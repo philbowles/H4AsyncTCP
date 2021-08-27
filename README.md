@@ -65,7 +65,7 @@ void    TCPconnect();
 void    TCPdisconnect(bool force = false);
 // send / receive
 void    rx(H4AT_FN_RXDATA f);
-void    txdata(const uint8_t* d,size_t len,bool copy=true);
+void    TX(const uint8_t* d,size_t len,bool copy=true);
 ```
 
 Unless you need very special handling, most practical use cases boil down to:
@@ -116,8 +116,8 @@ void    rx(H4AT_FN_RXDATA f); // all received data comes here: <void(const uint8
 void    TCPconnect(); // does what it says on the tin...
 void    TCPdisconnect(bool force = false); // ...as does this
 void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr); // see below
-void    txdata(mbx m); // internal use only
-void    txdata(const uint8_t* d,size_t len,bool copy=true); // send data. Leave the default to true.
+void    TX(mbx m); // internal use only
+void    TX(const uint8_t* d,size_t len,bool copy=true); // send data. Leave the default to true.
 
 ```
 

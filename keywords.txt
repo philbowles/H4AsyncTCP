@@ -21,7 +21,7 @@ rx	KEYWORD2
 TCPconnect	KEYWORD2
 TCPdisconnect	KEYWORD2
 TCPurl	KEYWORD2
-txdata	KEYWORD2
+TX	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
