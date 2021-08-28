@@ -29,7 +29,7 @@ extern "C"{
 }
 
 static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
-    Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
+//    Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
     if(!err){
         tcp_setprio(newpcb, TCP_PRIO_MIN);
         H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
@@ -44,32 +44,31 @@ static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
 //      H4AsyncServer
 //
 void H4AsyncServer::_newConnection(struct tcp_pcb *p){
-    h4.queueFunction([=]{
-        Serial.printf("NEW CONNECTION --> pcb=%p\n",p);
-        auto c=_instantiateRequest(p);
-        if(c){
-            c->_lastSeen=millis();
-            Serial.printf("QF insert c --> in %p\n",c);
-            H4AsyncClient::openConnections.insert(c);
-            H4AT_PRINT1("QF insert c --> out %p\n",c);
-            c->onError([=](int e,int i){
-                if(e==ERR_MEM){
-                    Serial.printf("OOM ERROR %d\n",i);
-                    
-                } if(_srvError) _srvError(e,i);
-            });
-            H4AT_PRINT1("QF 1 %p\n",c);
-            c->onRX([=](const uint8_t* data,size_t len){ route(c,data,len); });
-            H4AT_PRINT1("QF 2 %p\n",c);
-            H4AsyncClient::_scavenge();
-            H4AT_PRINT1("QF 3 %p\n",c);
-        } //else Serial.printf("WHAT THE ACTUAL FUCK??? ZERO client ptr!");
-    });
+    auto c=_instantiateRequest(p);
+    H4AT_PRINT1("NEW CONNECTION %p --> pcb=%p\n",c,p);
+    if(c){
+        c->_lastSeen=millis();
+        H4AT_PRINT1("QF insert c --> in %p\n",c);
+        HAL_disableInterrupts(); // protect oc from simultaneous updates!!!
+        H4AsyncClient::openConnections.insert(c);
+        HAL_enableInterrupts();
+        H4AT_PRINT1("QF insert c --> out %p\n",c);
+        c->onError([=](int e,int i){
+            if(e==ERR_MEM){
+                Serial.printf("OOM ERROR %d\n",i); // Retry-After: 120
+            } if(_srvError) _srvError(e,i);
+        });
+        H4AT_PRINT1("QF 1 %p\n",c);
+        c->onRX([=](const uint8_t* data,size_t len){ route(c,data,len); });
+        H4AT_PRINT1("QF 2 %p\n",c);
+        H4AsyncClient::_scavenge();
+        H4AT_PRINT1("QF 3 %p\n",c);
+    }
 }
 //
 void H4AsyncServer::begin(){
-    H4AT_PRINT1("SERVER %p begin\n",this);
-    static auto _raw_pcb = tcp_new();
+    H4AT_PRINT1("SERVER %p listening on port %d\n",this,_port);
+    auto _raw_pcb = tcp_new();
     if (_raw_pcb != NULL) {
         err_t err;
         tcp_arg(_raw_pcb,this);

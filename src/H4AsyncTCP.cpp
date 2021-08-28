@@ -130,14 +130,14 @@ void H4AsyncClient::_shutdown(){
         if(_cbDisconnect) _cbDisconnect();
         H4AT_PRINT1("RAW 4a err=%d STATE=%d\n",err,pcb->state);
         pcb=NULL; // == eff = reset;
-        auto c=this;
-        h4.queueFunction([c]{
-            H4AT_PRINT1("RAW 5 offload %p\n",c);
-            openConnections.erase(c);
-            H4AT_PRINT1("RAW 6 OC cleared\n");
-            delete c;
-        });
-    } //else Serial.printf("WTF???? %p pcb=0!\n",this);
+    } else Serial.printf("WTF???? %p pcb=0!\n",this);
+    auto c=this;
+    h4.queueFunction([c]{
+        H4AT_PRINT1("RAW 5 offload %p\n",c);
+        openConnections.erase(c);
+        H4AT_PRINT1("RAW 6 OC cleared\n");
+        delete c;
+    });
 }
 
 err_t _raw_poll(void *arg, struct tcp_pcb *tpcb){ // purely for startup timeout shortening
@@ -162,10 +162,10 @@ void _raw_error(void *arg, err_t err){
 }
 
 err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
-    if(err) Serial.printf("WATTTTTAAAAFFFFFFFFFF???? %d\n",err);
+    if(err) Serial.printf("WTAF? %d\n",err);
     auto rq=reinterpret_cast<H4AsyncClient*>(arg);
     if(rq->_closing){
-        Serial.printf("_raw_recv during close %p pcb=%p!!!\n",rq,p);
+        H4AT_PRINT1("_raw_recv during close %p pcb=%p!!!\n",rq,p);
         return ERR_ABRT;
     }
     //H4AT_PRINT1("CONNECTION %p raw_recv PCB=%p PBUF=%p PL=%p L=%d\n",arg,tpcb,p,p ? p->payload:0,p ? p->tot_len:0);
@@ -177,8 +177,6 @@ err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
         return ERR_ABRT;
     }
     else {
-    Serial.printf("************* _raw_recv %p %p\n",tpcb,p);
-    dumphex((const uint8_t*) p->payload,64);
         rq->_lastSeen=millis();
         auto cp=p;
         auto ctpcb=tpcb;
@@ -252,7 +250,7 @@ static err_t _tcp_write(struct tcp_pcb* p,const uint8_t* data, size_t size, uint
 H4AsyncClient::H4AsyncClient(struct tcp_pcb *newpcb,size_t timeout): pcb(newpcb),_cnxTimeout(timeout){
     _heapLO=(_HAL_freeHeap() * H4T_HEAP_CUTOUT_PC) / 100;
     _heapHI=(_HAL_freeHeap() * H4T_HEAP_CUTIN_PC) / 100;
-    H4AT_PRINT1("H4AC CTOR %p PCB=%p LO=%u HI=%u\n",this,newpcb,_heapLO,_heapHI);
+    H4AT_PRINT1("H4AC CTOR %p PCB=%p LO=%u HI=%u\n",this,pcb,_heapLO,_heapHI);
     if(pcb){
         tcp_arg(pcb, this);
         tcp_recv(pcb, _raw_recv);
@@ -352,7 +350,7 @@ void H4AsyncClient::_handleFragment(const uint8_t* data,u16_t len,u8_t flags) {
                 }
             }
         } else if(!_addFragment(data,len)) _notify(ERR_MEM,len);
-    } else Serial.printf("HF while closing!!!\n");
+    } //else Serial.printf("HF while closing!!!\n");
 }
 
 bool H4AsyncClient::_heapGuard(H4_FN_VOID f){
@@ -453,7 +451,7 @@ void H4AsyncClient::nagle(bool enable){
     if(pcb){
         if(enable) tcp_nagle_enable(pcb);
         else tcp_nagle_disable(pcb);
-    } else Serial.printf("NAGLE PCB NULL\n");
+    } //else Serial.printf("NAGLE PCB NULL\n");
 }
 
 uint32_t H4AsyncClient::remoteAddress(){ return ip_addr_get_ip4_u32(&pcb->remote_ip); }
