@@ -1,19 +1,15 @@
 import asyncore
 import socket
 
-ANSWER = 'HTTP/1.0 200 OK\r\n' + \
-    'Content-Type: text/html; charset=utf-8\r\n' + \
-    'Content-Length: 0\r\n' + \
-    'Connection: close\r\n\r\n'
-
 class EchoHandler(asyncore.dispatcher_with_send):
 
     def handle_read(self):
-        data = self.recv(16384)
+        data = self.recv(32768)
         print("RX ",len(data))
-        print(data)
+        #print(data)
 
         if(data):
+            print("TX ",len(data))
             self.send(data)
 
 class EchoServer(asyncore.dispatcher):

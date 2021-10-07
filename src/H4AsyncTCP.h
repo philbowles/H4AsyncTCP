@@ -29,8 +29,10 @@ philbowles2012@gmail.com
 No warranties are given. The license may not give you all of the permissions necessary for your intended use. 
 For example, other rights such as publicity, privacy, or moral rights may limit how you use the material.
 */
-#include<Arduino.h>
 #pragma once
+#include <h4async_config.h>
+
+#include<Arduino.h>
 
 #define LWIP_INTERNAL
 extern "C"{
@@ -39,16 +41,10 @@ extern "C"{
 
 #ifdef ARDUINO_ARCH_ESP8266
     #include<ESP8266WiFi.h>
-    #include<LittleFS.h>
-    #define HAL_FS LittleFS
 #else
     #include<WiFi.h>
-    #include<FS.h>
-    #include<SPIFFS.h>
-    #define HAL_FS SPIFFS
 #endif
 
-#include <h4async_config.h>
 #include <H4Tools.h>
 #include <H4.h>
 
@@ -67,6 +63,7 @@ enum {
     H4AT_HEAP_LIMITER_OFF,
     H4AT_HEAP_LIMITER_LOST,
     H4AT_INPUT_TOO_BIG,
+    H4AT_CLOSING,
     H4AT_OUTPUT_TOO_BIG
 };
 
@@ -110,13 +107,11 @@ class H4AS_HTTPRequest;
 
 using H4AT_NVP_MAP      =std::unordered_map<std::string,std::string>;
 using H4AS_RQ_HANDLER   =std::function<void(H4AT_HTTPHandler*)>;
-using H4AT_FN_CB_ERROR  =std::function<void(int,int)>;
+using H4AT_FN_ERROR     =std::function<bool(int,int)>;
 using H4AT_FN_RXDATA    =std::function<void(const uint8_t* data, size_t len)>;
 
 class H4AsyncClient {
-                void            _busted(size_t len);
-                bool            _heapGuard(H4_FN_VOID f);
-                void            _parseURL(const std::string& url);
+                void                _parseURL(const std::string& url);
     protected:
                 H4AT_FN_RXDATA      _rxfn=[](const uint8_t* data,size_t len){ Serial.printf("RXFN SAFETY\n"); dumphex(data,len); };
     public:
@@ -135,20 +130,20 @@ class H4AsyncClient {
                 uint8_t*            _bpp=nullptr;
                 H4_FN_VOID          _cbConnect;
                 H4_FN_VOID          _cbDisconnect;
-                H4AT_FN_CB_ERROR    _cbError;
-
+                H4AT_FN_ERROR       _cbError=[](int e,int i){ return true; }; // return false to avoid auto-shutdown
                 bool                _closing=false;
-                size_t              _cnxTimeout;
+//                size_t              _cnxTimeout;
         static  H4_INT_MAP          _errorNames;
-                size_t              _heapLO;
-                size_t              _heapHI;
+//                size_t              _heapLO;
+//                size_t              _heapHI;
                 uint32_t            _lastSeen=0;
+                bool                _nagle=false;
                 struct tcp_pcb      *pcb;
                 size_t              _stored=0;
 
-        H4AsyncClient(tcp_pcb* p=0,size_t timeout=H4AT_CNX_TIMEOUT);
-        virtual ~H4AsyncClient(){ H4AT_PRINT1("H4AsyncClient DTOR %p pcb=%p _bpp=%p\n",this,pcb,_bpp); }
-                void                close();
+        H4AsyncClient(tcp_pcb* p=0);
+        virtual ~H4AsyncClient(){ H4AT_PRINT2("H4AsyncClient DTOR %p pcb=%p _bpp=%p\n",this,pcb,_bpp); }
+                void                close(){ _shutdown(); }
                 void                connect(const std::string& host,uint16_t port);
                 void                connect(IPAddress ip,uint16_t port);
                 void                connect(const std::string& url);
@@ -157,19 +152,17 @@ class H4AsyncClient {
                 //void                dump();
                 //
         static  std::string         errorstring(int e);
-                void                keepAlive(){ _lastSeen=millis(); }
+//                void                keepAlive(){ _lastSeen=millis(); }
                 uint32_t            localAddress();
                 IPAddress           localIP();
                 std::string         localIPstring();
                 uint16_t            localPort();
-                size_t              maxPacket(){
-                    return ( _HAL_maxHeapBlock() * (100-H4T_HEAP_CUTIN_PC)) / 100;
-                }
+                size_t              maxPacket(){ return ( _HAL_maxHeapBlock() * (100-H4T_HEAP_CUTIN_PC)) / 100; }
 //                size_t              maxPacket(){ return 3285; }
                 void                nagle(bool b=true);
                 void                onConnect(H4_FN_VOID cb){ _cbConnect=cb; }
                 void                onDisconnect(H4_FN_VOID cb){ _cbDisconnect=cb; }
-                void                onError(H4AT_FN_CB_ERROR cb){ _cbError=cb; }
+                void                onError(H4AT_FN_ERROR cb){ _cbError=cb; }
                 void                onRX(H4AT_FN_RXDATA f){ _rxfn=f; }
                 uint32_t            remoteAddress();
                 IPAddress           remoteIP();
@@ -182,7 +175,7 @@ class H4AsyncClient {
                 void                _clearDanglingInput();
                 void                _connect();
                 void                _handleFragment(const uint8_t* data,u16_t len,u8_t flags);
-        inline  void                _notify(int e,int i){ if(_cbError) _cbError(e,i); }
+                void                _notify(int e,int i=0);
         static  void                _scavenge();
                 void                _shutdown();
 };
@@ -190,18 +183,15 @@ class H4AsyncClient {
 class H4AsyncServer {
     protected:
             uint16_t                _port;
-            H4AT_FN_CB_ERROR        _srvError;
-
     public:
+            H4AT_FN_ERROR        _srvError;
         H4AsyncServer(uint16_t port): _port(port){}
         virtual ~H4AsyncServer(){}
 
         virtual void        begin();
-                void        onError(H4AT_FN_CB_ERROR f){ _srvError=f; }
+                void        onError(H4AT_FN_ERROR f){ _srvError=f; }
         virtual void        reset(){}
         virtual void        route(void* c,const uint8_t* data,size_t len)=0;
-// don't call!  
-                void        _newConnection(struct tcp_pcb *p);
 
         virtual H4AsyncClient* _instantiateRequest(struct tcp_pcb *p)=0;
 };

@@ -3,6 +3,8 @@
 #######################################
 
 H4AsyncClient	KEYWORD1
+H4AsyncServer	KEYWORD1
+H4AsyncTCP	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -13,14 +15,26 @@ H4AT_PRINT2	KEYWORD2
 H4AT_PRINT3	KEYWORD2
 H4AT_PRINT4	KEYWORD2
 
-onTCPconnect	KEYWORD2
-onTCPdisconnect	KEYWORD2
-onTCPerror	KEYWORD2
-onTCPpoll	KEYWORD2
-rx	KEYWORD2
-TCPconnect	KEYWORD2
-TCPdisconnect	KEYWORD2
-TCPurl	KEYWORD2
+close	KEYWORD2
+connect	KEYWORD2
+connect	KEYWORD2
+connect	KEYWORD2
+connected	KEYWORD2
+errorstring	KEYWORD2
+localAddress	KEYWORD2
+localIP	KEYWORD2
+localIPstring	KEYWORD2
+localPort	KEYWORD2
+maxPacket	KEYWORD2
+nagle	KEYWORD2
+onConnect	KEYWORD2
+onDisconnect	KEYWORD2
+onError	KEYWORD2
+onRX	KEYWORD2
+remoteAddress	KEYWORD2
+remoteIP	KEYWORD2
+remoteIPstring	KEYWORD2
+remotePort	KEYWORD2
 TX	KEYWORD2
 
 #######################################

@@ -37,6 +37,6 @@ SOFTWARE.
 // setting to zero will INSECURELY accept ANY site "at the other end" without confirmiung its fingerprint matches
 
 #define H4AT_CNX_TIMEOUT       5
-// amount of seconds after outbound connect is deemd to have failed
+// amount of seconds after outbound connect is deemed to have failed
 
 #define H4AS_SCAVENGE_FREQ 20000

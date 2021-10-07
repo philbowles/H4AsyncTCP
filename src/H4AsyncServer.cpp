@@ -28,45 +28,39 @@ extern "C"{
   #include "lwip/tcp.h"
 }
 
-static err_t _raw_accept(void *arg, struct tcp_pcb *newpcb, err_t err){
-//    Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
-    if(!err){
-        tcp_setprio(newpcb, TCP_PRIO_MIN);
-        H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,newpcb,err);
-        reinterpret_cast<H4AsyncServer*>(arg)->_newConnection(newpcb);
-        return ERR_OK;
-    } else {
-        Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
-        return err;
-    }
+static err_t _raw_accept(void *arg, struct tcp_pcb *p, err_t err){
+    h4.queueFunction([arg,p,err]{
+        Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
+        if(!err){
+            tcp_setprio(p, TCP_PRIO_MIN);
+            H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
+            auto srv=reinterpret_cast<H4AsyncServer*>(arg);
+            auto c=srv->_instantiateRequest(p);
+            Serial.printf("NEW CONNECTION %p --> pcb=%p\n",c,p);
+            if(c){
+                c->_lastSeen=millis();
+                c->onError([=](int e,int i){
+                    if(e==ERR_MEM){
+                        Serial.printf("OOM ERROR %d\n",i); // Retry-After: 120
+                        return false;
+                    } if(srv->_srvError) srv->_srvError(e,i);
+                    return true;
+                });
+                H4AT_PRINT1("QF 1 %p\n",c);
+                c->onRX([=](const uint8_t* data,size_t len){ srv->route(c,data,len); });
+                H4AT_PRINT1("QF insert c --> in %p\n",c);
+                H4AsyncClient::openConnections.insert(c);
+                H4AT_PRINT1("QF insert c --> out %p\n",c);
+            }  else Serial.printf("_instantiateRequest returns 0 !!!!!  %p\n",p);
+        } else Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
+    });
+    return ERR_OK;
 }
 //
 //      H4AsyncServer
 //
-void H4AsyncServer::_newConnection(struct tcp_pcb *p){
-    auto c=_instantiateRequest(p);
-    H4AT_PRINT1("NEW CONNECTION %p --> pcb=%p\n",c,p);
-    if(c){
-        c->_lastSeen=millis();
-        H4AT_PRINT1("QF insert c --> in %p\n",c);
-        HAL_disableInterrupts(); // protect oc from simultaneous updates!!!
-        H4AsyncClient::openConnections.insert(c);
-        HAL_enableInterrupts();
-        H4AT_PRINT1("QF insert c --> out %p\n",c);
-        c->onError([=](int e,int i){
-            if(e==ERR_MEM){
-                Serial.printf("OOM ERROR %d\n",i); // Retry-After: 120
-            } if(_srvError) _srvError(e,i);
-        });
-        H4AT_PRINT1("QF 1 %p\n",c);
-        c->onRX([=](const uint8_t* data,size_t len){ route(c,data,len); });
-        H4AT_PRINT1("QF 2 %p\n",c);
-        H4AsyncClient::_scavenge();
-        H4AT_PRINT1("QF 3 %p\n",c);
-    }
-}
-//
 void H4AsyncServer::begin(){
+//    h4.every(1000,[]{ heap_caps_check_integrity_all(true); });
     H4AT_PRINT1("SERVER %p listening on port %d\n",this,_port);
     auto _raw_pcb = tcp_new();
     if (_raw_pcb != NULL) {

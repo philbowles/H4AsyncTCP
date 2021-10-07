@@ -1,4 +1,2 @@
-chunkl file on handler
-optimised evt message routine
-post
-auto options header handler
+heap protection
+tcp q protection?
