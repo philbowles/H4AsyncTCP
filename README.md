@@ -24,9 +24,8 @@ Licence: ![licence](https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png) Crea
 * [Where does it fit in "The IOT hierarchy of needs"?](#the-iot-hierarchy-of-needs)
 * [Prerequisites](#prerequisites)
 * [Installation](#installation)
-* [Raising Issues](#issues)
+* [Raising Issues](#raising-issues)
 * [Known Problems](#known-problems)
-* [Usage](#usage)
 * [API](#api)
 
 ---
@@ -34,8 +33,6 @@ Licence: ![licence](https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png) Crea
 # What does it do?
 
 H4AsyncTCP provides two simple-to-use classes which handle all aspects of Asynchronous TCP Rx/Tx. While it *can* be used "standalone" by experienced coders, its main purpose is to function as the base of all other H4Async< xxx > libraries (see below).
-
-For this reason, the Usage/API documentation here is deliberately minimal.
 
 ---
 
@@ -57,7 +54,7 @@ For this reason, the Usage/API documentation here is deliberately minimal.
 
 # Prerequisites
 
-The library has been tested using the following firmware. Please do not even *think* about raising anhy issues unless you have the following correctly installed.
+The library has been tested using the following firmware. Please do not even *think* about raising any issues unless you have the following correctly installed.
 
 * [ESP8266 core 3.0.2](https://github.com/esp8266/Arduino)
 * [ESP32 core 2.0.0](https://github.com/espressif/arduino-esp32)
@@ -80,7 +77,7 @@ Soon* all H4 libraries will use the [H4 Installer](https://github.com/philbowles
 
 ---
 
-# Issues
+# Raising Issues
 
 ## If you want a *quick* resolution, please follow these rules:
 
@@ -105,13 +102,6 @@ The basic structure of your code will be:
 * Connect to remote server
 * Synchronously TX some data...
 * ...and/or asynchronously RX some data
-
-### Client event handlers
-
-* onConnect - void function
-* onDisconnect - void function
-* onRX - `void myRxFunction(const uint8_t* data, size_t len);`
-* onError - `bool myErrorFunction(int e,int i);`
 
 #### Error handling:
 
@@ -148,7 +138,7 @@ The basic structure of your code will be:
   {H4AT_OUTPUT_TOO_BIG,"Output exceeds safe heap"}
 ```
 
-*Your* handler funtion can decide whether the error is fatal or not: if it returns `true`, then the connection will be closed (if not already). If there is an actual closure then the `onDisconnect` event will fire, so be careful not to cause an infinite loop. 
+*Your* handler function can decide whether the error is fatal or not: if it returns `true`, then the connection will be closed (if not already). If there is an actual closure then the `onDisconnect` event will fire, so be careful not to cause an infinite loop. 
 
 In the early stages, it is best to always return true and have all errors close the connection.
 
@@ -156,7 +146,8 @@ In the early stages, it is best to always return true and have all errors close 
 
 The main prerequisite of [Example sketch](examples/h4asyncCOMPARISON/h4asyncCOMPARISON.ino) is that there is an "Echo Server" somehwre on the network. The two easiest ways of achieving this are:
 
-* Windows10 systems
+* Windows10 systems:
+
 In control panel / programs / turn Windows features on or off, select "Simple TCPIP services..."
 
 ![services](assets/services.jpg)
@@ -175,7 +166,7 @@ The sketch runs a series of tests in which a number of specifically-sized TCP pa
 
 Where no data is lost / discarded the amount RXed will - of course - be the same as the total amount TXed and the test passes, otherwise it fails.
 
-By changing the size, number and stagger value, tou can estabish "safe" limits for your own system...
+By changing the size, number and stagger value, you can estabish "safe" limits for your own system...
 
 ***WHEN `USE_ASYNC_CLIENT` IS SET TO 0***
 
@@ -198,10 +189,10 @@ This is only required if you have subclassed `H4AsyncClient`. Here you instantia
   Call the base class `begin` to set up incoming connection handling on the designated port, then do anything your own server needs during initialisation.
 
 * `reset`
-  Deallocate any open resources / handles / memory etc and set your class so that a subsequent call to `begin` will bring server to intial state as it would have done on 1st call.
+  Deallocate any open resources / handles / memory etc and set your class so that a subsequent call to `begin` will bring server to initial state as it would have done on 1st call.
 
 * `route(void* c,const uint8_t* data,size_t len`
-  This is the main "handler" for your server. `c` is a client* and will be `H4AsyncClient*` unless you have subclassed it in `_instantiateRequest`. `data` and `len` describe the raw data of the message that cause the connection.
+  This is the main "handler" for your server. `c` is a client* and will be `H4AsyncClient*` unless you have subclassed it in `_instantiateRequest`. `data` and `len` describe the raw data of the message that caused the incoming connection.
 
   Here you will analyse, parse, act upon the incoming message in whatever way defines your server and then reply to the incoming request with e.g. `c->TX(someReplyDataPointer,someReplyDataLength);`
 
@@ -213,14 +204,14 @@ See the fully-functional example below in the [Server API](#server-api) section
 
 ## Client
 
-### Callbacks
+### Client Callbacks
 
 * `void cbConnect(void)`
 * `void cbDisconnect(void)`
 * `bool cbError(int e,int i)`
 * `void rxFunction(const uint8_t* data, size_t len)`
 
-### Methods
+### Client Methods
 
 ```cpp
 void close(); // force immediate connection close
@@ -233,7 +224,7 @@ uint32_t localAddress();
 IPAddress localIP();
 std::string localIPstring();
 uint16_t localPort();
-size_t maxPacket(); // future use (see "know problems")
+size_t maxPacket(); // future use (see "known problems")
 void nagle(bool b=true); // sets / unsets nagle algorithm on the connection
 void onConnect(H4_FN_VOID cbConnect); // define onConnect event handler
 void onDisconnect(H4_FN_VOID cbDisconnect); // define onDisconnect event handler
@@ -269,12 +260,11 @@ ESP8266 targets will happily resolve `.local` names. See "Known Issues" re ESP32
 ---
 ## Server
 
-### Callbacks
+### Server Callbacks
 
 * `void cbError(int e,int i)`
 
-### Methods
-
+### Server Methods
 
 ```cpp
 // Constructor
@@ -318,9 +308,9 @@ EchoServer echo(7); // listen on port 7 and echo any input
 
 * Heap protection is not yet implemented, so you are recommended to stay within size / speed limits as much as possible. There is a problem *somewhere* in that once the users goes beyond the "window size", certain combinations of TX / RX size, nagle on/off, network speed? cause some packets not to get ACKed by the remote server.
 
-Hence until this is solved, one cannot safely determine the "max safe packet size" :( required for the heap protection mechanism. *[ I currently suspect LwIP - any help in this area would be most welcome! (and will almost certainly turn out to be H4 code of course... )]*
+Hence until this is solved, one cannot safely determine the "max safe packet size" required for the heap protection mechanism. *[ I currently suspect LwIP - any help in this area would be most welcome! (and will almost certainly turn out to be H4 code of course... )]*
 
-Until then, try to keep packets smaller than a SND_BUF on TX and WND on RX when sent slowly, with these values scaled back proprtionately if sent in rapid bursts. Ideally the cpmbination of size / speed should stay within the known "safe effective kB/s" - which has been determined during testing, (but is almost certain to differ on *your* network)
+Until then, try to keep packets smaller than a SND_BUF on TX and WND on RX when sent slowly, with these values scaled back proportionately if sent in rapid bursts. Ideally the combination of size / speed should stay within the known "safe effective kB/s" - which has been determined during testing (but is almost certain to differ on *your* network)
 
 | Platform | TCP_MSS | TCP_SND_BUF | TCP_WND | Safe kBpsEff |
 | :--- | ---: | ---: | ---: | ---: |
@@ -328,7 +318,7 @@ Until then, try to keep packets smaller than a SND_BUF on TX and WND on RX when 
 | ESP8266 Low Memory | 536 | 1072 | 2144 |150|
 | ESP8266 High Bandwidth | 1460 | 2920 | 5840 |225|
 
-***N.B.*** Once the source of "the lost ACK" has been found, you won't need to worry about any of the above as your code will either "just work" when within safe limits or cause an error (  `H4AT_INPUT_TOO_BIG` or `H4AT_OUTPUT_TOO_BIG`) if outside those limits.
+***N.B.*** Once "the source of the lost ACK" has been found, you won't need to worry about any of the above as your code will either "just work" when within safe limits or cause an error (  `H4AT_INPUT_TOO_BIG` or `H4AT_OUTPUT_TOO_BIG`) if outside those limits.
 
 ---
 
