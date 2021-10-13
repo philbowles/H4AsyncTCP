@@ -58,7 +58,6 @@ extern "C"{
 enum {
     H4AT_ERR_DNS_FAIL,
     H4AT_ERR_DNS_NF,
-    H4AT_ERR_UNKNOWN,
     H4AT_HEAP_LIMITER_ON,
     H4AT_HEAP_LIMITER_OFF,
     H4AT_HEAP_LIMITER_LOST,
@@ -100,9 +99,8 @@ enum {
 
 struct tcp_pcb;
 
-class H4AsyncWebServer;
-class H4AT_HTTPHandler;
 class H4AsyncClient;
+class H4AT_HTTPHandler;
 class H4AS_HTTPRequest;
 
 using H4AT_NVP_MAP      =std::unordered_map<std::string,std::string>;
@@ -132,7 +130,6 @@ class H4AsyncClient {
                 H4_FN_VOID          _cbDisconnect;
                 H4AT_FN_ERROR       _cbError=[](int e,int i){ return true; }; // return false to avoid auto-shutdown
                 bool                _closing=false;
-//                size_t              _cnxTimeout;
         static  H4_INT_MAP          _errorNames;
 //                size_t              _heapLO;
 //                size_t              _heapHI;
@@ -152,7 +149,6 @@ class H4AsyncClient {
                 //void                dump();
                 //
         static  std::string         errorstring(int e);
-//                void                keepAlive(){ _lastSeen=millis(); }
                 uint32_t            localAddress();
                 IPAddress           localIP();
                 std::string         localIPstring();
@@ -193,5 +189,5 @@ class H4AsyncServer {
         virtual void        reset(){}
         virtual void        route(void* c,const uint8_t* data,size_t len)=0;
 
-        virtual H4AsyncClient* _instantiateRequest(struct tcp_pcb *p)=0;
+        virtual H4AsyncClient* _instantiateRequest(struct tcp_pcb *p);
 };

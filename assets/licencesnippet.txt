@@ -5,3 +5,5 @@ Licence: ![licence](https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png) Crea
 # ***N.B. This licence expressly prohibits commercial use***
 
 ---
+
+## If you are able, please [Support me on Patreon](https://patreon.com/esparto) and/or subscribe to my [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g)

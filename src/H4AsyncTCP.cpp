@@ -45,7 +45,7 @@ extern "C"{
 std::unordered_set<H4AsyncClient*> H4AsyncClient::openConnections;
 
 H4_INT_MAP H4AsyncClient::_errorNames={
-//#if H4AT_DEBUG
+#if H4AT_DEBUG
     {ERR_OK,"No error, everything OK"},
     {ERR_MEM,"Out of memory error"}, // -1
     {ERR_BUF,"Buffer error"},
@@ -65,16 +65,23 @@ H4_INT_MAP H4AsyncClient::_errorNames={
     {ERR_ARG,"Illegal argument"},
     {H4AT_ERR_DNS_FAIL,"DNS Fail"},
     {H4AT_ERR_DNS_NF,"Remote Host not found"},
-    {H4AT_ERR_UNKNOWN,"UNKNOWN"},
     {H4AT_HEAP_LIMITER_ON,"Heap Limiter ON"},
     {H4AT_HEAP_LIMITER_OFF,"Heap Limiter OFF"},
     {H4AT_HEAP_LIMITER_LOST,"Heap Limiter: packet discarded"},
     {H4AT_INPUT_TOO_BIG,"Input exceeds safe heap"},
     {H4AT_CLOSING,"Client closing"},
     {H4AT_OUTPUT_TOO_BIG,"Output exceeds safe heap"}
-//#endif
+#endif
 };
 
+//#define TF_ACK_DELAY   0x01U   /* Delayed ACK. */
+//#define TF_ACK_NOW     0x02U   /* Immediate ACK. */
+//#define TF_INFR        0x04U   /* In fast recovery. */
+//#define TF_TIMESTAMP   0x08U   /* Timestamp option enabled */
+//#define TF_RXCLOSED    0x10U   /* rx closed by tcp_shutdown */
+//#define TF_FIN         0x20U   /* Connection was closed locally (FIN segment enqueued). */
+//#define TF_NODELAY     0x40U   /* Disable Nagle algorithm */
+//#define TF_NAGLEMEMERR 0x80U   /* nagle enabled, memerr, try to output to prevent delayed ACK to happen */
 /*
 enum tcp_state {
   CLOSED      = 0,
@@ -113,37 +120,7 @@ typedef struct {
 } tcp_api_call_t;
 
 void H4AsyncClient::_notify(int e,int i){ if(e) if(_cbError(e,i)) _shutdown(); }
-/*
-#ifdef ARDUINO_ARCH_ESP32
-static err_t _tcp_close_api(struct tcpip_api_call_data *api_call_params){
-#else
-static err_t _tcp_close_api(void *api_call_params){
-#endif
-    tcp_api_call_t * params = (tcp_api_call_t *)api_call_params;
-    Serial.printf("_tcp_close_api %p\n",params->pcb);
-    err_t err;
-//    heap_caps_check_integrity_all(true);
-//    try{
-        err = tcp_close(params->pcb);
-//    }
-//    catch(std::exception e) {
-        Serial.printf("WILL this help?\n");
-//        heap_caps_check_integrity_all(true);
-//    }
-    if(err) Serial.printf("ERR %d after close\n",err);
-    Serial.printf("_tcp_close_api returns %d\n",err);
-    return err;
-}
 
-static err_t _tcp_close(struct tcp_pcb* p) {
-    tcp_api_call_t params{nullptr,p,nullptr,0,0};
-    #ifdef ARDUINO_ARCH_ESP32
-        return tcpip_api_call(_tcp_close_api, (struct tcpip_api_call_data*)&params);
-    #else
-        return _tcp_close_api((void*) &params);
-    #endif
-}
-*/
 void H4AsyncClient::_shutdown(){
     H4AT_PRINT1("_shutdown %p\n",this);
     _closing=true;
@@ -153,6 +130,8 @@ void H4AsyncClient::_shutdown(){
         _clearDanglingInput();
         H4AT_PRINT1("RAW 2 clean STATE=%d\n",pcb->state);
         tcp_arg(pcb, NULL);
+        //***************************************************
+        tcp_sent(pcb, NULL);
         tcp_recv(pcb, NULL);
         tcp_err(pcb, NULL);
         err_t err;
@@ -167,23 +146,7 @@ void H4AsyncClient::_shutdown(){
         pcb=NULL; // == eff = reset;
     } else H4AT_PRINT1("ALREADY SHUTDOWN %p pcb=0!\n",this);
 }
-/*
-err_t _raw_poll(void *arg, struct tcp_pcb *tpcb){ // purely for startup timeout shortening
-    auto c=reinterpret_cast<H4AsyncClient*>(arg);
-    H4AT_PRINT2("_raw_poll %p pcb=%p c->pcb=%p\n",c,tpcb,c->pcb);
-    static size_t tix=0;
-    tix++;
-    if(!(tix%c->_cnxTimeout)){
-        Serial.printf("_cnxTimeout expired\n");
-        tix=0;
-        //tcp_abort(tpcb);
-        //c->pcb=NULL;
-        _notify(ERR_TIMEOUT,_cnxTimeout);
-        return ERR_TIMEOUT;
-    }
-    return ERR_OK;
-}
-*/
+
 void _raw_error(void *arg, err_t err){
     h4.queueFunction([arg,err]{
         H4AT_PRINT1("CONNECTION %p *ERROR* err=%d\n",arg,err);
@@ -196,7 +159,7 @@ void _raw_error(void *arg, err_t err){
 err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
     H4AT_PRINT2("_raw_recv %p p=%p data=%p l=%d\n",arg,p,p ? p->payload:0,p ? p->tot_len:0);
     auto rq=reinterpret_cast<H4AsyncClient*>(arg);
-    if (p == NULL || rq->_closing) rq->_notify(ERR_CLSD,err);
+    if (p == NULL || rq->_closing) rq->_notify(ERR_CLSD,err); // * warn ...hanging data when closing?
     else {
         auto cpydata=static_cast<uint8_t*>(malloc(p->tot_len));
         memcpy(cpydata,p->payload,p->tot_len);
@@ -214,15 +177,17 @@ err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
     }
     return err;
 }
-
+/*
+err_t _raw_sent(void* arg,struct tcp_pcb *tpcb, u16_t len){
+    Serial.printf("_raw_sent %p pcb=%p len=%d\n",arg,tpcb,len);
+    return ERR_OK;
+}
+*/
 err_t _tcp_connected(void* arg, void* tpcb, err_t err){
     h4.queueFunction([arg,tpcb,err]{
         H4AT_PRINT1("_tcp_connected %p %p e=%d\n",arg,tpcb,err);
         auto rq=reinterpret_cast<H4AsyncClient*>(arg);
         auto p=reinterpret_cast<tcp_pcb*>(tpcb);
-//        tcp_poll(p,NULL,0);
-//        H4AT_PRINT2("C=%p cnx timer %d cancelled\n",rq,rq->_cnxTimeout);
-
     #if H4AT_DEBUG
         IPAddress ip(ip_addr_get_ip4_u32(&p->remote_ip));
         H4AT_PRINT1("C=%p _tcp_connected p=%p e=%d IP=%s:%d\n",rq,tpcb,err,ip.toString().c_str(),p->remote_port);
@@ -230,6 +195,8 @@ err_t _tcp_connected(void* arg, void* tpcb, err_t err){
         H4AsyncClient::openConnections.insert(rq);
         if(rq->_cbConnect) rq->_cbConnect();
         tcp_recv(p, &_raw_recv);
+        // ***************************************************
+        //tcp_sent(p, &_raw_sent);
     });
     return ERR_OK;
 }
@@ -275,8 +242,8 @@ H4AsyncClient::H4AsyncClient(struct tcp_pcb *newpcb): pcb(newpcb){
     H4AT_PRINT1("H4AC CTOR %p PCB=%p\n",this,pcb);
     if(pcb){
         tcp_arg(pcb, this);
-        tcp_recv(pcb, _raw_recv);
-        tcp_err(pcb, _raw_error);
+        tcp_recv(pcb, &_raw_recv);
+        tcp_err(pcb, &_raw_error);
     }
 }
 
@@ -365,14 +332,14 @@ void H4AsyncClient::_scavenge(){
     h4.every(
         H4AS_SCAVENGE_FREQ,
         []{
-            Serial.printf("SCAVENGE CONNECTIONS!\n");
+            H4AT_PRINT1("SCAVENGE CONNECTIONS!\n");
             std::vector<H4AsyncClient*> tbd;
             for(auto &oc:openConnections){
-                Serial.printf("T=%u OC %p ls=%u age(s)=%u SCAV=%u\n",millis(),oc,oc->_lastSeen,(millis() - oc->_lastSeen) / 1000,H4AS_SCAVENGE_FREQ);
+                H4AT_PRINT1("T=%u OC %p ls=%u age(s)=%u SCAV=%u\n",millis(),oc,oc->_lastSeen,(millis() - oc->_lastSeen) / 1000,H4AS_SCAVENGE_FREQ);
                 if((millis() - oc->_lastSeen) > H4AS_SCAVENGE_FREQ) tbd.push_back(oc);
             }
             for(auto &rq:tbd) {
-                Serial.printf("Scavenging %p\n",rq); 
+                H4AT_PRINT1("Scavenging %p\n",rq); 
                 rq->_shutdown();
                 openConnections.erase(rq);
                 delete rq;
@@ -427,9 +394,10 @@ uint16_t H4AsyncClient::localPort(){ return pcb->local_port; };
 
 void H4AsyncClient::nagle(bool enable){
     if(pcb){
-        if(enable) { Serial.printf("tcp_nagle_enable\n"); tcp_nagle_enable(pcb); _nagle=true; }
-        else { Serial.printf("tcp_nagle_disable\n"); tcp_nagle_disable(pcb); _nagle=false; }
-    } else Serial.printf("NAGLE PCB NULL\n");
+        if(enable) { tcp_nagle_enable(pcb); _nagle=true; }
+        else { tcp_nagle_disable(pcb); _nagle=false; }
+//        Serial.printf("PCB FLAGS=0x%02x\n",pcb->flags);
+    } // else Serial.printf("NAGLE PCB NULL\n");
 }
 
 uint32_t H4AsyncClient::remoteAddress(){ return ip_addr_get_ip4_u32(&pcb->remote_ip); }
@@ -452,7 +420,6 @@ void H4AsyncClient::TX(const uint8_t* data,size_t len,bool copy){
                 flags=copy ? TCP_WRITE_FLAG_COPY:0;
                 if(left - chunk) flags |= TCP_WRITE_FLAG_MORE;
                 H4AT_PRINT2("WRITE %p L=%d F=0x%02x LEFT=%d Q=%d\n",data+sent,chunk,flags,left,tcp_sndqueuelen(pcb));
-//                auto err=_tcp_write(this,pcb,data+sent,chunk,flags);
                 if(auto err=_tcp_write(this,pcb,data+sent,chunk,flags)){
                     _notify(err,44);
                     break;

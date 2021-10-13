@@ -1,2 +1,0 @@
-heap protection
-tcp q protection?

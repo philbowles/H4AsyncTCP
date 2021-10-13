@@ -30,18 +30,18 @@ extern "C"{
 
 static err_t _raw_accept(void *arg, struct tcp_pcb *p, err_t err){
     h4.queueFunction([arg,p,err]{
-        Serial.printf("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
+        H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
         if(!err){
             tcp_setprio(p, TCP_PRIO_MIN);
             H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
             auto srv=reinterpret_cast<H4AsyncServer*>(arg);
             auto c=srv->_instantiateRequest(p);
-            Serial.printf("NEW CONNECTION %p --> pcb=%p\n",c,p);
+            H4AT_PRINT1("NEW CONNECTION %p --> pcb=%p\n",c,p);
             if(c){
                 c->_lastSeen=millis();
                 c->onError([=](int e,int i){
                     if(e==ERR_MEM){
-                        Serial.printf("OOM ERROR %d\n",i); // Retry-After: 120
+                        H4AT_PRINT1("OOM ERROR %d\n",i); // Retry-After: 120
                         return false;
                     } if(srv->_srvError) srv->_srvError(e,i);
                     return true;
@@ -51,14 +51,19 @@ static err_t _raw_accept(void *arg, struct tcp_pcb *p, err_t err){
                 H4AT_PRINT1("QF insert c --> in %p\n",c);
                 H4AsyncClient::openConnections.insert(c);
                 H4AT_PRINT1("QF insert c --> out %p\n",c);
-            }  else Serial.printf("_instantiateRequest returns 0 !!!!!  %p\n",p);
-        } else Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
+            } // else Serial.printf("_instantiateRequest returns 0 !!!!!  %p\n",p);
+        } // else Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
     });
     return ERR_OK;
 }
 //
 //      H4AsyncServer
 //
+H4AsyncClient*  H4AsyncServer::_instantiateRequest(struct tcp_pcb *p){
+    auto c=new H4AsyncClient(p);
+    return c;
+};
+
 void H4AsyncServer::begin(){
 //    h4.every(1000,[]{ heap_caps_check_integrity_all(true); });
     H4AT_PRINT1("SERVER %p listening on port %d\n",this,_port);

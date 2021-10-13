@@ -7,12 +7,18 @@
 #include<H4.h>
 H4 h4(115200);
 
+#define ECHO_SERVER "192.168.1.20"
+#define ECHO_PORT 7
+
+#define YOUR_SSID "XXXXXXXX"
+#define YOUR_PWD "XXXXXXXX"
+
+#define USE_ASYNC_CLIENT 0
+
 H4_TIMER  dataLoss;
 H4_TIMER  stagger;
 
-#define USE_ASYNC_CLIENT 1
-
-#define USE_NAGLE true
+#define USE_NAGLE false
 #define DEFAULT_TIMEOUT  10000
 #define STAGGER 0
 #define BURST_SIZE 20
@@ -37,13 +43,13 @@ H4_TIMER  stagger;
 #endif
 
 #define BUFSIZE_PACKET  TCP_SND_BUF
-#define GTBUF_PACKET (TCP_SND_BUF * 3) / 2
 #define SPEED_PACKET TCP_SND_BUF / BURST_SIZE
+#define BUNKER_BUSTER (TCP_WND * 11) / 10
 
 #if USE_ASYNC_CLIENT 
-  char bigbuf[GTBUF_PACKET]; // WRONG!!!
+  char bigbuf[BUNKER_BUSTER]; // WRONG!!!
 #else
-  uint8_t bigbuf[GTBUF_PACKET];
+  uint8_t bigbuf[BUNKER_BUSTER];
 #endif
 
 struct test{
@@ -63,12 +69,11 @@ using VT = std::vector<test>;
 VT tests={
   {1,BUFSIZE_PACKET}, 
   {2,BUFSIZE_PACKET}, 
-  {1,GTBUF_PACKET},
+  {1,BUNKER_BUSTER},
   {BURST_SIZE,SPEED_PACKET}  
 };
 
 size_t I=0;
-
 
 void handleData(size_t i,void* data,size_t len){
     VT::value_type* T=&tests[i];
@@ -79,13 +84,9 @@ void handleData(size_t i,void* data,size_t len){
     if(T->dataRX==T->dataTX){
       h4.cancel(dataLoss);
       auto Ttotal=millis()-T->Tstart;
-      Serial.printf("T=%u TEST %d: PASS: %d bytes received. T=%u BPSavg=%d\n",millis(),i+1,T->dataRX,Ttotal,(T->dataRX/Ttotal));
+      Serial.printf("T=%u TEST %d: PASS: %d bytes received. T=%u kBPSeff=%d\n",millis(),i+1,T->dataRX,Ttotal,(T->dataRX/Ttotal));
       h4.cancel(stagger);
-#if USE_ASYNC_CLIENT
-      T->a->close(); /// ...and kill?
-#else
       T->a->close(); 
-#endif  
     }
 }
 
@@ -128,7 +129,6 @@ void runTest(size_t i){
       a->setNoDelay(!USE_NAGLE);
       sendPackets(i);
     });
-    a->connect("192.168.1.20",8080);
 #else
     H4AsyncClient* a=new H4AsyncClient();
     tests[i].a=a;
@@ -137,8 +137,8 @@ void runTest(size_t i){
         a->nagle(USE_NAGLE);
         sendPackets(i); 
     });
-    a->connect("192.168.1.20:8080");
 #endif
+    a->connect(ECHO_SERVER,ECHO_PORT);
 }
 
 #define TEST_LAUNCH DEFAULT_TIMEOUT + 1000
@@ -149,7 +149,7 @@ void runTests(){
 
 void h4setup(){
   WiFi.mode(WIFI_STA);
-  WiFi.begin("XXXXXXXX", "XXXXXXXX");
+  WiFi.begin(YOUR_SSID, YOUR_PWD);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
     Serial.print(".");
@@ -157,6 +157,7 @@ void h4setup(){
   }
   Serial.printf("\nIP: %s\n",WiFi.localIP().toString().c_str());
   Serial.printf("LIB %s: NAGLE=%s MSS=%d SND_BUF=%d WND=%d\n",LIB_NAME,USE_NAGLE ? "true":"false",TCP_MSS,TCP_SND_BUF,TCP_WND);
+  Serial.printf("Runing on %s\n",ARDUINO_BOARD);
   auto i=1;
   for(auto const& t:tests) Serial.printf("  Test %d: %d pkts %d\n",i++,t.N,t.size);
   Serial.printf("Cry 'Havoc!' and let slip the packets of War!\n\n");

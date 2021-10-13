@@ -1,131 +1,254 @@
-![vark](assets/H4Async.png)
+![cubans](assets/maslow_h4at.jpg)
 
-# ArduinoIDE Asynchronous TCP client library for ESP8266, ESP32
+# H4AsyncTCP
 
-## Version 0.0.1 12/07/2021
+## ArduinoIDE library: Asynchronous TCP Rx/Tx Client and abstract Asynchronous server
 
-IT MAY NOT EVEN HAPP, OK?
+## Version 0.0.1 (13/10/2021) - Should be considered "ALPHA"
+
+---
+
+Licence: ![licence](https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png) Creative Commons: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) [Legal Text](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode)
+
+# ***N.B. This licence expressly prohibits commercial use***
+
+---
+
+## If you are able, please [Support me on Patreon](https://patreon.com/esparto) and/or subscribe to my [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g)
+
+---
 
 # Contents
 
 * [What does it do?](#what-does-it-do)
-* [Worth 1000 words - the minimal API](#worth-1000-words)
-* [Where H4AsyncClient fits in "The Menagerie"](#the-menagerie-roadmap)
-* [API](#api)
-* [Known Issues](#known-issues)
-* [History / Origins](#history--origin)
+* [Where does it fit in "The IOT hierarchy of needs"?](#the-iot-hierarchy-of-needs)
+* [Prerequisites](#prerequisites)
 * [Installation](#installation)
-* [Issues](#issues)
+* [Raising Issues](#issues)
+* [Known Problems](#known-problems)
+* [Usage](#usage)
+* [API](#api)
+
+---
 
 # What does it do?
 
-On its own, not a lot and to change that you need to be a reasonable C++ programmer. It is designed as an abstract base class and both [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) and [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) use it as their core Async TCP driver. So if you want to use either of those, (or [H4/Plugins](https://github.com/philbowles/h4plugins) which sits on top of them both) you will need it anyway, even if you are not going to write your own sub-class.
+H4AsyncTCP provides two simple-to-use classes which handle all aspects of Asynchronous TCP Rx/Tx. While it *can* be used "standalone" by experienced coders, its main purpose is to function as the base of all other H4Async< xxx > libraries (see below).
 
-It's useful if you want to write your own Async protocol handler, as 90% of the hard bits have already been done for you. For example both the bugs and differences in the traditional ESPAsyncTCP (for ESP8266) and AsyncTCP (for ESP32) have been ironed out, so that there is a single common interface for all your Async TCP apps from now on. The whole process is reduced to:
-
-* set up server URL
-* set up RX function to receive data
-* connect to server
-* send some data
-
-Where permitted by the calling library, TLS is available merely by using "https" in the server URL rather than "http". Be aware that TLS implementation is "cheap and cheerful" and only available on ESP8266. It will not connect with servers requiring advanced features such as client certificates, military-grade cipher suites etc.
-
-One of the main benefits that that the pre-requisite forked versions of the Async Libraries ( [Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master) and [Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master) ) bring is *huge** packet fragmentation on transmit (TX), and reassembly of *huge** packets on receive (RX). 
-
-It also fixes at least two fatal bugs in ESPAsyncTCP (for ESP8266) which cause significant issues when trying to implement robust apps on top of that library and adds missing features to AsyncTCP (for ESP32). It still exposes the entire "old-style" API from the broken original libraries, to ease porting of any exisiting code you may have. Having said that, once you see how easy it is to use, you will almost certainly dispense with any old-style calls.
-
-*By "huge" we mean any packet that is larger than the total LwIP buffer space. For example on ESP8266, if you compile with the "Low Memory" option this will be 1072 bytes or 2920 with the "Higher Bandwith" options (at core 2.7.4)
-
-![lwip](assets/lwip.jpg)
-
-LwIP allows multiple buffers so what you see in the figures above is 1072=2x536 and 2920=2x1460. The important point here is that *all* of the values 536, 1460 (the individual LwIP buffer size) and 2 (the number of buffers) are implementation-dependent and *could* change in the future, so "hardcoding" any of them into your own app would be a **bad idea** as it could cause problems in the future or prevent you code running on newer / different machines.
-
-H4AsyncClient solves that problem by allowing data up to 1/2 of the free heap to be sent / received, irrespective of those LwIP "magic numbers". As an example, here it is running "underneath" [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) on an ESP8266 and allowing that lib to send and receive a 22kb+(!) MQTT packet
-
-![twentytwo](assets/twentytwo.jpg)
-
-On ESP32 this can grow to over 50kb
-
-![fiftyk](assets/fiftyk.jpg)
-
----
-## Worth 1000 words:
-
-Other than the ESPAsyncTCP/AsynTCP API which is exposed for compatibility should you need it (you won't!), the main H4AsyncClient API is:
-
-```cpp
-// callbacks
-void    onTCPconnect(H4AT_cbConnect callback);
-void    onTCPdisconnect(H4AT_cbDisconnect callback);
-void    onTCPerror(H4AT_cbError callback);
-void    onTCPpoll(H4AT_cbPoll callback);
-// setup / connect / disconnect
-void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr);
-void    TCPconnect();
-void    TCPdisconnect(bool force = false);
-// send / receive
-void    rx(H4AT_FN_RXDATA f);
-void    TX(const uint8_t* d,size_t len,bool copy=true);
-```
-
-Unless you need very special handling, most practical use cases boil down to:
-
-* define rx function
-* set URL, connect
-* tx data
+For this reason, the Usage/API documentation here is deliberately minimal.
 
 ---
 
-# The "menagerie" roadmap
+# The "IOT Hierarchy of needs"
 
-H4AsyncClient is the core driver of several other firmware packages for simple *robust* and rapid ***asynchronous*** IOT development on ESP8266 / ESP32
-
-SEE [Installation](#installation)
-
-![roadmap](assets/common/menagerieroadmap.jpg)
-
-## The related / dependent libraries
+![roadmap](assets/common/maslow_sml.jpg)
 
 || Name | Provides | Notes |
 | :---: | :----------  | :--- | :--- |
-||[Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master)|"Glue" to LwIP (ESP8266)| Important bugfixes |
-||[Forked ESPAsyncTCP](https://github.com/philbowles/ESPAsyncTCP-master)|"Glue" to LwIP(ESP32)| Missing features added |
-||[Forked ESPAsyncWebserver](https://github.com/philbowles/ESPAsyncWebServer)| Basis of webUI in H4Plugins| Several major bugfixes |
-|![roadmap](assets/common/tools_icon.jpg)|[PMB Tools](https://github.com/philbowles/H4Tools)|'32/'8266 HAL and utility functions| |
-|![roadmap](assets/common/H4Async_icon.jpg)|[H4AsyncClient](https://github.com/philbowles/H4AsyncClient)|Simple Large-payload Async TCP| API-compatible with ESPAsyncTCP, seamless TLS/SSL |
-|![roadmap](assets/common/pangolin_icon.jpg)|[PangolinMQTT](https://github.com/philbowles/PangolinMQTT)|Async MQTT Client|QoS 0/1/2 Fully 3.1.1 compliant. Large payloads |
-|![roadmap](assets/common/armadillo_icon.jpg)|[ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)|Async HTTP/S Client| Simple send/callback of large payloads |
-|![roadmap](assets/common/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers| |
-|![roadmap](assets/common/h4p_icon.jpg)|[H4/Plugins](https://github.com/philbowles/h4plugins)|Full Async IOT Firmware| Webserver, MQTT, OTA, NTP, HTTP etc etc |
+|![roadmap](assets/common/h4_icon.jpg)|[H4](https://github.com/philbowles/H4)|Scheduler/Async Timers - core of all multitasking functions| |
+|![roadmap](assets/common/tools_icon.jpg)|[H4Tools](https://github.com/philbowles/H4Tools)|'32/'8266 HAL and utility functions| |
+|![roadmap](assets/common/h4async_icon.jpg)|[H4AsyncTCP](https://github.com/philbowles/H4AsyncTCP)| Asynchronous TCP RX/TX| :point_left: *YOU ARE HERE*  |
+|![roadmap](assets/common/pangolin_icon.jpg)|[H4AsyncMQTT](https://github.com/philbowles/H4AsyncMQTT)| Asynchronous MQTT c/w auto-reconnect and *full* QoS0/1/2 | |
+|![roadmap](assets/common/armadillo_icon.jpg)|[H4AsyncHTTP](https://github.com/philbowles/H4AsyncHTTP)| Asynchronous remote GET / POST etc | |
+|![roadmap](assets/common/h4asws_icon.jpg)|[H4AsyncWebServer](https://github.com/philbowles/H4AsyncWebServer)| Asynchronous Web Server + fast webSockets + SSE| |
+|![roadmap](assets/common/h4p_icon.jpg)|[H4Plugins](https://github.com/philbowles/H4Plugins)| Fully-featured IOT Apps multitasking framework| |
+
+---
+
+# Prerequisites
+
+The library has been tested using the following firmware. Please do not even *think* about raising anhy issues unless you have the following correctly installed.
+
+* [ESP8266 core 3.0.2](https://github.com/esp8266/Arduino)
+* [ESP32 core 2.0.0](https://github.com/espressif/arduino-esp32)
+* [ArduinoIDE 1.8.16](https://www.arduino.cc/en/software)
+
+***N.B.***
+
+Note that PlatformIO is not in the above list. Many folk *do* use it, but you will need to create your own installation configuration.
+I am currently in discussions to add a PIO install to the standard [H4 Installer](https://github.com/philbowles/h4installer). If you are able to help / contribute to this, please get in touch!
+
+---
+
+# Installation
+
+Soon* all H4 libraries will use the [H4 Installer](https://github.com/philbowles/h4installer). This ensures that all versions match and that other additional special functions are included e.g. Addition of optimised board definitions in H4Plugins...
+
+...Until that's ready, install this library manually by downloading the zip file and using the ArduinoIDE to "add zip library". (Luckily, it has no extra tasks that would require the full H4 installer)
+
+* = Don't ask :) 
+
+---
+
+# Issues
+
+## If you want a *quick* resolution, please follow these rules:
+
+1. As with all H4xxx libraries, please make sure you have read *all* the relevant documentation relating to the issue and watched any videos on the [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g). Please also subscribe to the channel for notifications of news and updates.
+
+2. If you still think there is a problem, then join the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and report the issue *briefly* there. This is because I visit the group every day, whereas I do not have time to visit dozens of github repos every day. Furthermore, it alerts other users to potential problems and allows a rapid initial assessment. 
+
+3. If there is a genuine issue then you will be referred to [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) after which you are advised to create a full github issue report.
+
+4. Failing to make an initial report in the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and simply starting with a github issue, or failing to include all of the information required in [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) is likely to result in a ***long*** delay before it gets picked up.
+
+---
+
+# Usage
+
+## As a TCP client
+
+The basic structure of your code will be:
+
+* Instantiate `H4AsyncClient` object
+* Declare event handlers for connect/disconnect/RX data/error
+* Connect to remote server
+* Synchronously TX some data...
+* ...and/or asynchronously RX some data
+
+### Client event handlers
+
+* onConnect - void function
+* onDisconnect - void function
+* onRX - `void myRxFunction(const uint8_t* data, size_t len);`
+* onError - `bool myErrorFunction(int e,int i);`
+
+#### Error handling:
+
+`e` is the error and will be one of the values below.
+`i` occasionaly provides additional infor for some errors.
+
+```cpp
+// Errors passed up directly from LwIP
+  {ERR_OK,"No error, everything OK"},
+  {ERR_MEM,"Out of memory error"}, // -1
+  {ERR_BUF,"Buffer error"},
+  {ERR_TIMEOUT,"Timeout"},
+  {ERR_RTE,"Routing problem"},
+  {ERR_INPROGRESS,"Operation in progress"}, // -5
+  {ERR_VAL,"Illegal value"},
+  {ERR_WOULDBLOCK,"Operation would block"},
+  {ERR_USE,"Address in use"},
+  {ERR_ALREADY,"Already connecting"},
+  {ERR_ISCONN,"Conn already established"}, // -10
+  {ERR_CONN,"Not connected"}, // -11
+  {ERR_IF,"Low-level netif error"}, // -12
+  {ERR_ABRT,"Connection aborted"}, // -13
+  {ERR_RST,"Connection reset"}, // -14
+  {ERR_CLSD,"Connection closed"},
+  {ERR_ARG,"Illegal argument"},
+// Errors generated by H4AsyncTCP itself
+  {H4AT_ERR_DNS_FAIL,"DNS Fail"},
+  {H4AT_ERR_DNS_NF,"Remote Host not found"},
+  {H4AT_HEAP_LIMITER_ON,"Heap Limiter ON"},
+  {H4AT_HEAP_LIMITER_OFF,"Heap Limiter OFF"},
+  {H4AT_HEAP_LIMITER_LOST,"Heap Limiter: packet discarded"},
+  {H4AT_INPUT_TOO_BIG,"Input exceeds safe heap"},
+  {H4AT_CLOSING,"Client closing"},
+  {H4AT_OUTPUT_TOO_BIG,"Output exceeds safe heap"}
+```
+
+*Your* handler funtion can decide whether the error is fatal or not: if it returns `true`, then the connection will be closed (if not already). If there is an actual closure then the `onDisconnect` event will fire, so be careful not to cause an infinite loop. 
+
+In the early stages, it is best to always return true and have all errors close the connection.
+
+## Running the example sketch
+
+The main prerequisite of [Example sketch](examples/h4asyncCOMPARISON/h4asyncCOMPARISON.ino) is that there is an "Echo Server" somehwre on the network. The two easiest ways of achieving this are:
+
+* Windows10 systems
+In control panel / programs / turn Windows features on or off, select "Simple TCPIP services..."
+
+![services](assets/services.jpg)
+
+After reboot you will find an Echo server on port 7
+
+* On any system having Python3 installed
+
+Run the provided [Python Echo Server](src/echoserver.py) which listens on 8007
+
+In all cases, edit the code of the sketch for the IP/Port of *your* echo server.
+
+### How the sketch works
+
+The sketch runs a series of tests in which a number of specifically-sized TCP packets are sent to the echo server at a chosen rate ("stagger" value in mS, default=0 i.e. immediately consecutive) and the amount of data echoed back is totalled up.
+
+Where no data is lost / discarded the amount RXed will - of course - be the same as the total amount TXed and the test passes, otherwise it fails.
+
+By changing the size, number and stagger value, tou can estabish "safe" limits for your own system...
+
+***WHEN `USE_ASYNC_CLIENT` IS SET TO 0***
+
+If you set `USE_ASYNC_CLIENT` to 1, the sketch will compile using the ESPAsyncTCP and the tests will almost certainly fail!
+
+Results of running the code against both libraries on both ESP8266 and ESP32 can be found [here](docs/testoutput32.txt)
+
+---
+## As a TCP Server
+
+`H4AsyncServer` is highly abstract - it has only one non-virtual function `onError`.
+
+To create your own server then you need to define virtual overrides for:
+
+* `_instantiateRequest`
+
+This is only required if you have subclassed `H4AsyncClient`. Here you instantiate your server handler object and return a pointer to its base `H4AsyncClient`. In most cases, the default `H4AsyncClient` will suffice
+
+* `begin`
+  Call the base class `begin` to set up incoming connection handling on the designated port, then do anything your own server needs during initialisation.
+
+* `reset`
+  Deallocate any open resources / handles / memory etc and set your class so that a subsequent call to `begin` will bring server to intial state as it would have done on 1st call.
+
+* `route(void* c,const uint8_t* data,size_t len`
+  This is the main "handler" for your server. `c` is a client* and will be `H4AsyncClient*` unless you have subclassed it in `_instantiateRequest`. `data` and `len` describe the raw data of the message that cause the connection.
+
+  Here you will analyse, parse, act upon the incoming message in whatever way defines your server and then reply to the incoming request with e.g. `c->TX(someReplyDataPointer,someReplyDataLength);`
+
+See the fully-functional example below in the [Server API](#server-api) section
 
 ---
 
 # API
 
-Since H4AsyncClient must be inherited from, all of the following methods are `protected`
+## Client
 
-The only public methods are the default constructor and the `dump` function (if H4AT_DEBUG is set in H4AT_config.h)
+### Callbacks
+
+* `void cbConnect(void)`
+* `void cbDisconnect(void)`
+* `bool cbError(int e,int i)`
+* `void rxFunction(const uint8_t* data, size_t len)`
+
+### Methods
 
 ```cpp
-void    _parseURL(const std::string& url);// insiders shortcut
-void    onTCPconnect(H4AT_cbConnect callback); // <void(void)>
-void    onTCPdisconnect(H4AT_cbDisconnect callback); // <void(int8_t)> -ve values arise in TCP, +ve values generated by H4AsyncClient
-void    onTCPerror(H4AT_cbError callback); // <void(int e,int info)> see above. Info gives more details 
-void    onTCPpoll(H4AT_cbPoll callback); // <void(void)>
-void    rx(H4AT_FN_RXDATA f); // all received data comes here: <void(const uint8_t*,size_t)>;
-void    TCPconnect(); // does what it says on the tin...
-void    TCPdisconnect(bool force = false); // ...as does this
-void    TCPurl(const char* url,const uint8_t* fingerprint=nullptr); // see below
-void    TX(mbx m); // internal use only
-void    TX(const uint8_t* d,size_t len,bool copy=true); // send data. Leave the default to true.
-
+void close(); // force immediate connection close
+void connect(const std::string& host,uint16_t port);
+void connect(IPAddress ip,uint16_t port);
+void connect(const std::string& url); // e.g. http://insecure.remote.ru:12345/long/resource/path/?data=123&moredata=456" (see below)
+bool connected(); // true if it is
+std::string errorstring(int e); // if H4AT_DEBUG set, translates e into human-readable error
+uint32_t localAddress();
+IPAddress localIP();
+std::string localIPstring();
+uint16_t localPort();
+size_t maxPacket(); // future use (see "know problems")
+void nagle(bool b=true); // sets / unsets nagle algorithm on the connection
+void onConnect(H4_FN_VOID cbConnect); // define onConnect event handler
+void onDisconnect(H4_FN_VOID cbDisconnect); // define onDisconnect event handler
+void onError(H4AT_FN_ERROR cbError); // define onError event handler
+void onRX(H4AT_FN_RXDATA rxFunction); // define data receive handler
+uint32_t remoteAddress();
+IPAddress remoteIP();
+std::string remoteIPstring();
+uint16_t remotePort();
+void TX(const uint8_t* d,size_t len,bool copy=true); // send data. If AND ONLY IF data is static, copy=false is more efficient
 ```
 
-[Example sketch](examples/inherit/inherit.ino)
+### URL defintion
 
-## URL defintion
-
-The url must be specified in the following general form. The extended path and query portions are optional, as is the port. If the port is omitted it will default to 80 for URLs starting `http` and 443 for those starting `https`
+The url must be specified in the following general form. The extended path and query portions are optional, as is the port. If the port is omitted it will default to 80 for URLs starting `http`
 
 `http://hostname:port/path/to/resource?a=b&c=d"`
 
@@ -137,66 +260,75 @@ The `hostname` portion my be specified as a "dotted quad" IP address e.g. "172.1
 
 ESP8266 targets will happily resolve `.local` names. See "Known Issues" re ESP32
 
-### Valid examples
+#### Valid examples
 
 * `http://192.168.1.15` // defaults to port 80
-* `https://myremotehost.com/api?userid=123456` // default to port 443
-* `https://mosquitto.local:8883` // .local only works on ESP8266 at the moment
+* `http://mosquitto.local:8883` // .local only works on ESP8266 at the moment
 * `http://insecure.remote.ru:12345/long/resource/path/?data=123&moredata=456`
 
-### Using TLS
+---
+## Server
 
-TLS is only currently only available on ESP8266 targets. The first step to using TLS is to edit the [`async_config.h`](https://github.com/philbowles/ESPAsyncTCP-master/blob/master/src/async_config.h) file in [Forked AsyncTCP](https://github.com/philbowles/AsyncTCP-master/scr) and change `#define ASYNC_TCP_SSL_ENABLED 0` to `#define ASYNC_TCP_SSL_ENABLED 1`
+### Callbacks
 
-Note that this will significantly increase the size of the compiled app. Unless you absolutely need it, do not compile in TLS!
+* `void cbError(int e,int i)`
 
-Note also that the version of TLS that ships with ESPAsyncTCP is very weak and there are many sites that will refuse to connect as they require stronger ciphers or client certificates etc.
+### Methods
 
-![tls](assets/common/tls.jpg)
-### TODO
 
-* Add `@username:password` basic auth scheme for e.g. [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP)
+```cpp
+// Constructor
+H4AsyncServer(uint16_t port);
 
+// See "usage" above for descriptions
+void begin();
+void onError(H4AT_FN_ERROR f);
+void reset();
+void route(void* c,const uint8_t* data,size_t len)=0;
+
+H4AsyncClient* _instantiateRequest(struct tcp_pcb *p);
+
+```
+
+### Fully-functional example
+
+Since the server API has been described under [Usage](#as-a-tcp-server) above, the following code of a simple Echo server should "pull together" server creation and handling.
+
+The server simply returns whatever it receives to the client, i.e. it echoes back the input
+
+```cpp
+class EchoServer: public H4AsyncServer {
+  public:
+    EchoServer(uint16_t port): H4AsyncServer(port){}
+        void            route(void* c,const uint8_t* data,size_t len) override { 
+          reinterpret_cast<H4AsyncClient*>(c)->TX(data,len);
+        };
+};
+//
+// which may then be instantiated as:
+//
+EchoServer echo(7); // listen on port 7 and echo any input
+```
 
 ---
 
-# Known Issues
+# Known Problems
 
-* ESP32 version cannot resolve `.local` addresses so you will need to specify the IP address
-* TLS very limited: only sites with very low requirements will allow connection
-* Some sites that send chunked-encoding responses also send dditonal packets - this confuses the rebuiulding mechanism. 
-  A better way needs to be found and will be fixed in a future release
+* ESP32 version cannot resolve `.local` addresses so you will need to specify or resolve the IP address yourself.
 
----
+* Heap protection is not yet implemented, so you are recommended to stay within size / speed limits as much as possible. There is a problem *somewhere* in that once the users goes beyond the "window size", certain combinations of TX / RX size, nagle on/off, network speed? cause some packets not to get ACKed by the remote server.
 
-# History / Origin
+Hence until this is solved, one cannot safely determine the "max safe packet size" :( required for the heap protection mechanism. *[ I currently suspect LwIP - any help in this area would be most welcome! (and will almost certainly turn out to be H4 code of course... )]*
 
-H4AsyncClient is in essence the blue portion of the following diagram, chopped out of [PangolinMQTT](https://github.com/philbowles/PangolinMQTT) so as a "core concept" it has been working well for quite a while.
+Until then, try to keep packets smaller than a SND_BUF on TX and WND on RX when sent slowly, with these values scaled back proprtionately if sent in rapid bursts. Ideally the cpmbination of size / speed should stay within the known "safe effective kB/s" - which has been determined during testing, (but is almost certain to differ on *your* network)
 
-In that role it allowed for huge payloads (up to 1/2 the available Free Heap) to be sent and received over MQTT. It fragments the outgoing packets into message blocks small enough to fit whatever LwIP buffers your implementation has configured (without you having to worry or even know what they are) and acts a flow-control manager to synchronise the real-time to-ing, fro-ing and ACK-ing of Asynchronous TCP in the background. It does the reverse for huge incoming messages, which can only arrive - by definition - one LwIP buffer-full at a time. It then reassembles all the fragments into one huge packet and passes it to the MQTT protocol analyser.
+| Platform | TCP_MSS | TCP_SND_BUF | TCP_WND | Safe kBpsEff |
+| :--- | ---: | ---: | ---: | ---: |
+| ESP32 | 1436 | 5744 | 5744 |425|
+| ESP8266 Low Memory | 536 | 1072 | 2144 |150|
+| ESP8266 High Bandwidth | 1460 | 2920 | 5840 |225|
 
-No other library known to the author for ESP8266 / ESP32 can do this for MQTT and it does it seamlessly over TLS for HTTPS(ESP8266 only) or unencrypted HTTP (ESP8266 and ESP32). From the user's point-of-view you just "send a large packet" or "receive a large packet" - *which is the way it should be!*
-
-It is not much of a leap to realise that the same functionality is ideal for asynchronous retrieval of web resources / APIs / REST services over HTTP/S. Yes, there are many examples of "reaching out" to remote servers e.g. Blynk or Thingspeak etc, but the author knows of none that are fully asynchronous ***and*** that can safely and robustly handle 20-30kb pages as can [ArmadilloHTTP](https://github.com/philbowles/ArmadilloHTTP) - which you could visualise as the diagram below with "MQTT" crossed out and "HTTP" written in in crayon)
-
-![mbm](assets/origin.jpg)
-
----
-
-# Installation
-
-Please see [H4 Installer](https://github.com/philbowles/h4installer)
-# Issues
-
-## If you want a *quick* resolution, please follow these rules:
-
-1. As with all H4 and H4Plugins libraries, please make sure you have read *all* the relevant documentation relating to the issue and watched any videos on the [Youtube channel (instructional videos)](https://www.youtube.com/channel/UCYi-Ko76_3p9hBUtleZRY6g). Please also subscribe to the channel for notifications of news and updates.
-
-2. If you still think there is a problem, then join the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and report the issue briefly there. This is because I visit the group every day, whereas I do not have time to visit 11 github repos every day. Furthermore, it alerts other users to potential problems and allows an initial assessment. 
-
-3. If there is a genuine issue then you will be referred to [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) after which you are advised to create a full github issue report.
-
-4. Failing to make an initial report in the [Facebook H4  Support / Discussion](https://www.facebook.com/groups/444344099599131/) group and simply starting with a github issue, or failing to include all of the information required in [Raising H4/H4Plugins issues](https://github.com/philbowles/h4plugins/blob/master/docs/issues.md) is likely to result in a ***long*** delay before it gets picked up.
+***N.B.*** Once the source of "the lost ACK" has been found, you won't need to worry about any of the above as your code will either "just work" when within safe limits or cause an error (  `H4AT_INPUT_TOO_BIG` or `H4AT_OUTPUT_TOO_BIG`) if outside those limits.
 
 ---
 

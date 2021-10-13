@@ -28,5 +28,5 @@ class EchoServer(asyncore.dispatcher):
             print ('Incoming connection from %s' % repr(addr))
             handler = EchoHandler(sock)
 
-server = EchoServer('0.0.0.0', 8080)
+server = EchoServer('0.0.0.0', 8007)
 asyncore.loop()

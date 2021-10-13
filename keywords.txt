@@ -1,10 +1,16 @@
+H4AsyncTCP	KEYWORD1
+
 #######################################
 # Datatypes (KEYWORD1)
 #######################################
 
 H4AsyncClient	KEYWORD1
 H4AsyncServer	KEYWORD1
-H4AsyncTCP	KEYWORD1
+
+H4AT_NVP_MAP	KEYWORD1
+H4AS_RQ_HANDLER	KEYWORD1
+H4AT_FN_ERROR	KEYWORD1
+H4AT_FN_RXDATA	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -15,9 +21,8 @@ H4AT_PRINT2	KEYWORD2
 H4AT_PRINT3	KEYWORD2
 H4AT_PRINT4	KEYWORD2
 
+begin	KEYWORD2
 close	KEYWORD2
-connect	KEYWORD2
-connect	KEYWORD2
 connect	KEYWORD2
 connected	KEYWORD2
 errorstring	KEYWORD2
@@ -34,7 +39,8 @@ onRX	KEYWORD2
 remoteAddress	KEYWORD2
 remoteIP	KEYWORD2
 remoteIPstring	KEYWORD2
-remotePort	KEYWORD2
+reset	KEYWORD2
+route	KEYWORD2
 TX	KEYWORD2
 
 #######################################

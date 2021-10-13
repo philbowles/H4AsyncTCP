@@ -1,0 +1,90 @@
+=============== ESP8266 =================
+
+15:08:28.907 -> LIB ESPAsyncTCP: NAGLE=false MSS=1460 SND_BUF=2920 WND=5840
+15:08:28.907 -> Runing on D1_MINI
+15:08:28.954 ->   Test 1: 1 pkts 2920
+15:08:28.954 ->   Test 2: 2 pkts 2920
+15:08:28.954 ->   Test 3: 1 pkts 6424
+15:08:28.954 ->   Test 4: 20 pkts 146
+15:08:28.954 -> Cry 'Havoc!' and let slip the packets of War!
+15:08:28.954 -> 
+15:08:39.932 -> T=16052 TEST 1: Send 1 packet(s) @ 2920 (=2920) STAGGER=0
+15:08:39.979 -> T=16065 TEST 1: PASS: 2920 bytes received. T=12 kBPSeff=243
+15:08:50.935 -> T=27047 TEST 2: Send 2 packet(s) @ 2920 (=5840) STAGGER=0
+15:09:00.952 -> TEST 2: FAIL: DATA LOSS - RCVD 2920
+15:09:01.938 -> T=38047 TEST 3: Send 1 packet(s) @ 6424 (=6424) STAGGER=0
+15:09:11.923 -> TEST 3: FAIL: DATA LOSS - RCVD 2920
+15:09:12.953 -> T=49056 TEST 4: Send 20 packet(s) @ 146 (=2920) STAGGER=0
+15:09:22.978 -> TEST 4: FAIL: DATA LOSS - RCVD 1168
+
+15:11:06.464 -> LIB H4AsyncTCP: NAGLE=false MSS=1460 SND_BUF=2920 WND=5840
+15:11:06.464 -> Runing on D1_MINI
+15:11:06.464 ->   Test 1: 1 pkts 2920
+15:11:06.464 ->   Test 2: 2 pkts 2920
+15:11:06.464 ->   Test 3: 1 pkts 6424
+15:11:06.464 ->   Test 4: 20 pkts 146
+15:11:06.464 -> Cry 'Havoc!' and let slip the packets of War!
+15:11:06.464 -> 
+15:11:17.472 -> T=15880 TEST 1: Send 1 packet(s) @ 2920 (=2920) STAGGER=0
+15:11:17.519 -> T=15900 TEST 1: PASS: 2920 bytes received. T=20 kBPSeff=146
+15:11:28.475 -> T=26875 TEST 2: Send 2 packet(s) @ 2920 (=5840) STAGGER=0
+15:11:28.521 -> T=26901 TEST 2: PASS: 5840 bytes received. T=26 kBPSeff=224
+15:11:39.487 -> T=37883 TEST 3: Send 1 packet(s) @ 6424 (=6424) STAGGER=0
+15:11:39.533 -> T=37917 TEST 3: PASS: 6424 bytes received. T=34 kBPSeff=188
+15:11:50.504 -> T=48876 TEST 4: Send 20 packet(s) @ 146 (=2920) STAGGER=0
+15:11:50.504 -> T=48911 TEST 4: PASS: 2920 bytes received. T=34 kBPSeff=85
+#
+# Low Memory setting
+#
+16:09:50.214 -> LIB H4AsyncTCP: NAGLE=false MSS=536 SND_BUF=1072 WND=2144
+16:09:50.214 -> Runing on ESP8266_WEMOS_D1MINI
+16:09:50.214 ->   Test 1: 1 pkts 1072
+16:09:50.214 ->   Test 2: 2 pkts 1072
+16:09:50.214 ->   Test 3: 1 pkts 2358
+16:09:50.214 ->   Test 4: 20 pkts 53
+16:09:50.214 -> Cry 'Havoc!' and let slip the packets of War!
+16:09:50.214 -> 
+16:10:01.197 -> T=16089 TEST 1: Send 1 packet(s) @ 1072 (=1072) STAGGER=0
+16:10:01.197 -> T=16098 TEST 1: PASS: 1072 bytes received. T=8 kBPSeff=134
+16:10:12.220 -> T=27089 TEST 2: Send 2 packet(s) @ 1072 (=2144) STAGGER=0
+16:10:12.220 -> T=27105 TEST 2: PASS: 2144 bytes received. T=15 kBPSeff=142
+16:10:23.231 -> T=38092 TEST 3: Send 1 packet(s) @ 2358 (=2358) STAGGER=0
+16:10:23.231 -> T=38116 TEST 3: PASS: 2358 bytes received. T=24 kBPSeff=98
+16:10:34.237 -> T=49097 TEST 4: Send 20 packet(s) @ 53 (=1060) STAGGER=0
+16:10:34.237 -> T=49127 TEST 4: PASS: 1060 bytes received. T=30 kBPSeff=35
+
+================== ESP32 ========================
+
+15:05:10.888 -> LIB AsyncTCP: NAGLE=false MSS=1436 SND_BUF=5744 WND=5744
+15:05:10.888 -> Runing on ESP32_DEV
+15:05:10.888 ->   Test 1: 1 pkts 5744
+15:05:10.888 ->   Test 2: 2 pkts 5744
+15:05:10.888 ->   Test 3: 1 pkts 6318
+15:05:10.888 ->   Test 4: 20 pkts 287
+15:05:10.888 -> Cry 'Havoc!' and let slip the packets of War!
+15:05:10.888 -> 
+15:05:21.942 -> T=13676 TEST 1: Send 1 packet(s) @ 5744 (=5744) STAGGER=0
+15:05:21.942 -> T=13696 TEST 1: PASS: 5744 bytes received. T=20 kBPSeff=287
+15:05:32.894 -> T=24661 TEST 2: Send 2 packet(s) @ 5744 (=11488) STAGGER=0
+15:05:42.915 -> TEST 2: FAIL: DATA LOSS - RCVD 5744
+15:05:43.894 -> T=35662 TEST 3: Send 1 packet(s) @ 6318 (=6318) STAGGER=0
+15:05:53.897 -> TEST 3: FAIL: DATA LOSS - RCVD 5744
+15:05:54.925 -> T=46663 TEST 4: Send 20 packet(s) @ 287 (=5740) STAGGER=0
+15:05:54.925 -> T=46692 TEST 4: PASS: 5740 bytes received. T=29 kBPSeff=197
+
+15:02:23.163 -> LIB H4AsyncTCP: NAGLE=false MSS=1436 SND_BUF=5744 WND=5744
+15:02:23.163 -> Runing on ESP32_DEV
+15:02:23.163 ->   Test 1: 1 pkts 5744
+15:02:23.163 ->   Test 2: 2 pkts 5744
+15:02:23.163 ->   Test 3: 1 pkts 6318
+15:02:23.163 ->   Test 4: 20 pkts 287
+15:02:23.163 -> Cry 'Havoc!' and let slip the packets of War!
+15:02:23.163 -> 
+15:02:34.196 -> T=13674 TEST 1: Send 1 packet(s) @ 5744 (=5744) STAGGER=0
+15:02:34.196 -> T=13694 TEST 1: PASS: 5744 bytes received. T=20 kBPSeff=287
+15:02:45.167 -> T=24658 TEST 2: Send 2 packet(s) @ 5744 (=11488) STAGGER=0
+15:02:45.214 -> T=24687 TEST 2: PASS: 11488 bytes received. T=28 kBPSeff=410
+15:02:56.149 -> T=35657 TEST 3: Send 1 packet(s) @ 6318 (=6318) STAGGER=0
+15:02:56.196 -> T=35677 TEST 3: PASS: 6318 bytes received. T=19 kBPSeff=332
+15:03:07.149 -> T=46660 TEST 4: Send 20 packet(s) @ 287 (=5740) STAGGER=0
+15:03:07.197 -> T=46696 TEST 4: PASS: 5740 bytes received. T=36 kBPSeff=159
