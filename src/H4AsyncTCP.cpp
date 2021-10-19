@@ -162,18 +162,23 @@ err_t _raw_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err){
     if (p == NULL || rq->_closing) rq->_notify(ERR_CLSD,err); // * warn ...hanging data when closing?
     else {
         auto cpydata=static_cast<uint8_t*>(malloc(p->tot_len));
-        memcpy(cpydata,p->payload,p->tot_len);
-        auto cpyflags=p->flags;
-        auto cpylen=p->tot_len;
-        tcp_recved(tpcb, p->tot_len);
-        H4AT_PRINT2("* p=%p * FREE DATA %p %d 0x%02x bpp=%p\n",p,p->payload,p->tot_len,p->flags,rq->_bpp);
-        pbuf_free(p);
-        err=ERR_OK;
-        h4.queueFunction([rq,cpydata,cpylen,cpyflags]{
-            H4AT_PRINT2("_raw_recv %p data=%p L=%d f=0x%02x \n",rq,cpydata,cpylen,cpyflags);
-            rq->_lastSeen=millis();
-            rq->_handleFragment((const uint8_t*) cpydata,cpylen,cpyflags);
-        });
+        if(cpydata){
+            memcpy(cpydata,p->payload,p->tot_len);
+            auto cpyflags=p->flags;
+            auto cpylen=p->tot_len;
+            tcp_recved(tpcb, p->tot_len);
+            H4AT_PRINT2("* p=%p * FREE DATA %p %d 0x%02x bpp=%p\n",p,p->payload,p->tot_len,p->flags,rq->_bpp);
+            pbuf_free(p);
+            err=ERR_OK;
+            h4.queueFunction([rq,cpydata,cpylen,cpyflags]{
+                H4AT_PRINT2("_raw_recv %p data=%p L=%d f=0x%02x \n",rq,cpydata,cpylen,cpyflags);
+                rq->_lastSeen=millis();
+                rq->_handleFragment((const uint8_t*) cpydata,cpylen,cpyflags);
+            },[cpydata]{
+                H4AT_PRINT2("FREEING NON REBUILT @ %p\n",cpydata);
+                free(cpydata);
+            });
+        } else rq->_notify(ERR_MEM,_HAL_freeHeap());
     }
     return err;
 }

@@ -100,11 +100,8 @@ enum {
 struct tcp_pcb;
 
 class H4AsyncClient;
-class H4AT_HTTPHandler;
-class H4AS_HTTPRequest;
 
 using H4AT_NVP_MAP      =std::unordered_map<std::string,std::string>;
-using H4AS_RQ_HANDLER   =std::function<void(H4AT_HTTPHandler*)>;
 using H4AT_FN_ERROR     =std::function<bool(int,int)>;
 using H4AT_FN_RXDATA    =std::function<void(const uint8_t* data, size_t len)>;
 

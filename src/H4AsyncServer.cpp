@@ -30,7 +30,7 @@ extern "C"{
 
 static err_t _raw_accept(void *arg, struct tcp_pcb *p, err_t err){
     h4.queueFunction([arg,p,err]{
-        H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
+//        H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
         if(!err){
             tcp_setprio(p, TCP_PRIO_MIN);
             H4AT_PRINT1("RAW _raw_accept <-- arg=%p p=%p e=%d\n",arg,p,err);
@@ -46,11 +46,11 @@ static err_t _raw_accept(void *arg, struct tcp_pcb *p, err_t err){
                     } if(srv->_srvError) srv->_srvError(e,i);
                     return true;
                 });
-                H4AT_PRINT1("QF 1 %p\n",c);
+//                H4AT_PRINT1("QF 1 %p\n",c);
                 c->onRX([=](const uint8_t* data,size_t len){ srv->route(c,data,len); });
-                H4AT_PRINT1("QF insert c --> in %p\n",c);
+//                H4AT_PRINT1("QF insert c --> in %p\n",c);
                 H4AsyncClient::openConnections.insert(c);
-                H4AT_PRINT1("QF insert c --> out %p\n",c);
+//                H4AT_PRINT1("QF insert c --> out %p\n",c);
             } // else Serial.printf("_instantiateRequest returns 0 !!!!!  %p\n",p);
         } // else Serial.printf("RAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAW %d\n",err);
     });
