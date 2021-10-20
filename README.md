@@ -8,6 +8,8 @@
 
 * BUGFIX: memory leak when receiving small msgs
 
+[Release Notes](docs/relnotes.md)
+
 ---
 
 Licence: ![licence](https://i.creativecommons.org/l/by-nc-sa/4.0/80x15.png) Creative Commons: Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) [Legal Text](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode)
